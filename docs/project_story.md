@@ -1,6 +1,7 @@
 ---
 title: Project Story
 nav_order: 4
+permalink: /story
 ---
 
 # ADVERSA — Adversarial Forensic Verification for Windows Incident Response

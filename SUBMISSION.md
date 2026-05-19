@@ -1,6 +1,7 @@
 ---
 title: Try It Out
 nav_order: 2
+permalink: /submission
 ---
 
 # Try It Out

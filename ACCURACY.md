@@ -1,6 +1,7 @@
 ---
 title: Accuracy & Evidence Integrity
 nav_order: 5
+permalink: /accuracy
 ---
 
 # Accuracy & Evidence Integrity

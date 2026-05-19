@@ -1,6 +1,7 @@
 ---
 title: Dataset
 nav_order: 6
+permalink: /dataset
 ---
 
 # Dataset Documentation
