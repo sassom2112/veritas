@@ -441,7 +441,7 @@ async def investigate(target_path, rules=None, no_synthesis=False, ioc_data=None
 
             pass1_score, pass1_hits, pass1_reasons = parse_findings(tool_outputs, rules)
             elapsed1 = (datetime.now(timezone.utc) - t0).total_seconds()
-            print(f"\n  Score: {pass1_score}/100  ({elapsed1:.1f}s)")
+            print(f"\n  Score: {pass1_score}  ({elapsed1:.1f}s)")
             for r in pass1_reasons:
                 print(f"    • {r}")
 
@@ -553,7 +553,7 @@ Only report what tool output directly shows. No speculation.\
                         print(f"\n  ⚠️  Agentic pass unavailable: {api_err}")
                         analysis_text = (
                             f"[Agentic pass unavailable — deterministic result]\n"
-                            f"Score: {pass1_score}/100  "
+                            f"Score: {pass1_score}  "
                             f"Techniques: {list(pass1_hits.keys())}"
                         )
                         break
@@ -642,7 +642,7 @@ Only report what tool output directly shows. No speculation.\
                                 analysis_text = (
                                     f"[{'Budget exhausted' if not stop_early else 'Early report'} "
                                     f"— {tool_call_count} calls]\n"
-                                    f"Score: {pass1_score}/100"
+                                    f"Score: {pass1_score}"
                                 )
                             break
 
@@ -708,7 +708,7 @@ Only report what tool output directly shows. No speculation.\
                 new_techs = sorted(set(final_hits.keys()) - set(pass1_hits.keys()))
 
                 print(f"\n  Agentic pass: {tool_call_count} tool calls, "
-                      f"{elapsed2:.1f}s, score={final_score}/100 (Δ{delta:+d})")
+                      f"{elapsed2:.1f}s, score={final_score} (Δ{delta:+d})")
                 if new_techs:
                     print(f"  New detections: {', '.join(new_techs)}")
 
@@ -728,7 +728,7 @@ Only report what tool output directly shows. No speculation.\
 
             # ── Final verdict ─────────────────────────────────────────────
             print('\n=== CONFIDENCE SCORE ===')
-            print(f'Compromise Confidence: {final_score}/100')
+            print(f'Compromise Confidence: {final_score}')
             for r in final_reasons:
                 print(f'  • {r}')
 

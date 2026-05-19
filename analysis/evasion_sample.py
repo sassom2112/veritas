@@ -118,14 +118,14 @@ for i, c in enumerate(sample, 1):
     lines.append(f"## Sample {i} — {tid}")
     lines.append("")
 
-    lines.append(f"**Iteration {c['detection_iter']} — CAUGHT** (score {c['detection_score']}/100)")
+    lines.append(f"**Iteration {c['detection_iter']} — CAUGHT** (score {c['detection_score']})")
     lines.append("```")
     lines.append(textwrap.fill(c['detection_artifact'], width=90))
     lines.append("```")
     lines.append("")
 
     outcome = "EVADED ✓" if c['evaded'] else "CAUGHT AGAIN ✗"
-    lines.append(f"**Iteration {c['evolved_iter']} — {outcome}** (score {c['evolved_score']}/100)")
+    lines.append(f"**Iteration {c['evolved_iter']} — {outcome}** (score {c['evolved_score']})")
     lines.append("```")
     lines.append(textwrap.fill(c['evolved_artifact'], width=90))
     lines.append("```")

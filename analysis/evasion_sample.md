@@ -23,12 +23,12 @@ No inference or reconstruction — direct read of training telemetry.
 
 ## Sample 1 — T1059.001
 
-**Iteration 1759 — CAUGHT** (score 40/100)
+**Iteration 1759 — CAUGHT** (score 40)
 ```
 EventID=4690 | Host=WORKSTATION5
 ```
 
-**Iteration 1774 — EVADED ✓** (score 0/100)
+**Iteration 1774 — EVADED ✓** (score 0)
 ```
 Image=C:\Windows\System32\cmd.exe | TargetObject=HKLM\SOFTWARE | EventID=12
 ```
@@ -42,12 +42,12 @@ Image=C:\Windows\System32\cmd.exe | TargetObject=HKLM\SOFTWARE | EventID=12
 
 ## Sample 2 — T1087.001
 
-**Iteration 2076 — CAUGHT** (score 50/100)
+**Iteration 2076 — CAUGHT** (score 50)
 ```
 Get-CimInstance -Class Win32_Account | Select Name,SID
 ```
 
-**Iteration 2088 — EVADED ✓** (score 0/100)
+**Iteration 2088 — EVADED ✓** (score 0)
 ```
 Explorer queries user info via WMI provider host process
 ```
@@ -61,12 +61,12 @@ Explorer queries user info via WMI provider host process
 
 ## Sample 3 — T1548.002
 
-**Iteration 2795 — CAUGHT** (score 50/100)
+**Iteration 2795 — CAUGHT** (score 50)
 ```
 C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -ep bypass
 ```
 
-**Iteration 2806 — CAUGHT AGAIN ✗** (score 150/100)
+**Iteration 2806 — CAUGHT AGAIN ✗** (score 150)
 ```
 Image=C:\windows\system32\svchost.exe | TargetObject=HKLM\SOFTWARE\Microsoft\Windows\Curre
 ntVersion\WindowsUpdate\Orchestrator\Schedu | EventID=12 |
@@ -82,13 +82,13 @@ Host=WORKSTATION5.theshire.local
 
 ## Sample 4 — T1548.002
 
-**Iteration 1032 — CAUGHT** (score 50/100)
+**Iteration 1032 — CAUGHT** (score 50)
 ```
 Image=C:\Windows\servicing\TrustedInstaller.exe | EventID=7 |
 Host=WORKSTATION5.theshire.local
 ```
 
-**Iteration 1045 — EVADED ✓** (score 0/100)
+**Iteration 1045 — EVADED ✓** (score 0)
 ```
 Registry SetValue HKLM\Software\Classes\CLSID\{random-guid}\InprocServer32
 ```
@@ -102,14 +102,14 @@ Registry SetValue HKLM\Software\Classes\CLSID\{random-guid}\InprocServer32
 
 ## Sample 5 — T1560.001
 
-**Iteration 3449 — CAUGHT** (score 150/100)
+**Iteration 3449 — CAUGHT** (score 150)
 ```
 Image=C:\windows\System32\svchost.exe |
 TargetObject=HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Connections
 | EventID=12 | Host=MORDORDC.mordor.local
 ```
 
-**Iteration 3468 — CAUGHT AGAIN ✗** (score 200/100)
+**Iteration 3468 — CAUGHT AGAIN ✗** (score 200)
 ```
 Source=C:\windows\system32\services.exe | Target=C:\windows\System32\lsass.exe |
 Access=0x1000

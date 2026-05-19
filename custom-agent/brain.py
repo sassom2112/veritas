@@ -478,7 +478,7 @@ class ForensicBrain:
             score, matched, reasons = self.blue.discriminate(artifact)
             detected = score >= 40
             
-            print(f"🔵 Blue score: {score}/100 — "
+            print(f"🔵 Blue score: {score} — "
                   f"{'✅ DETECTED' if detected else '❌ MISSED'}")
             
             # ── RECORD ─────────────────────────────────────────

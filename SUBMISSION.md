@@ -30,7 +30,7 @@ The most compelling run is the **controller** host from the SANS FIND EVIL! 2026
 
   Pass 1: deterministic sweep — 24 tool calls
 
-  Score: 145/100  →  HIGH
+  Score: 145  →  HIGH
     • Masquerading         (+50) [ASL] via: ['WmiPrvSE.exe', 'wmiprvse.exe', 'svchost.exe']
     • Credential Dumping   (+50) [ASL] via: ['procdump', 'spinlock', 'spinlock.exe']
     • Account Discovery    (+45) [ASL] via: ['WmiPrvSE.exe', 'vibranium', 'SHIELDBASE+vibranium']

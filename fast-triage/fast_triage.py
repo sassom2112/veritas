@@ -148,7 +148,7 @@ def main():
     score, hits, elapsed, cmd_log, raw_output = triage(args.mount_path, rules)
 
     print(f"\n  Elapsed: {elapsed:.1f}s")
-    print(f"  Score:   {score}/100")
+    print(f"  Score:   {score}")
 
     if hits:
         print(f"\n  IOC Hits:")
