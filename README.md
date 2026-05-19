@@ -172,6 +172,8 @@ for the full case walkthrough with terminal output.
 
 ## MCP Tool Server Security
 
+![ADVERSA Guardrails — Anti-Hallucination Trust Chain & MCP Security Boundary](docs/adversa-guardrails.png)
+
 `sift_server.py` implements a **4-layer validator** before executing any forensic command:
 
 1. Hard-blocked strings (`rm`, `dd`, `mkfs`, overwrite patterns)
