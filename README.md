@@ -1,8 +1,28 @@
 # ADVERSA — Adversarial Forensic Investigation Framework
 
-**A dual-agent forensic AI that autonomously investigates Windows disk images using an adversarial verification loop: a Triage Agent finds evidence, a Forensic Auditor challenges every finding, only confirmed artifacts survive.**
+**A dual-agent AI that autonomously investigates Windows disk images for evidence of compromise.
+A Triage Agent hunts for artifacts. A Forensic Auditor independently challenges every finding.
+Only what survives physical verification makes it into the report.**
 
-SANS FIND EVIL! Hackathon 2026 — Adversarial Signal Learning (ASL)
+Built for the **SANS FIND EVIL! Hackathon 2026** — a competitive digital forensics challenge where
+participants investigate real Windows disk images to identify attacker techniques, lateral movement,
+and persistence across a multi-host environment.
+
+---
+
+## Why Two Agents?
+
+LLMs hallucinate. In forensics, a hallucinated finding is a false accusation.
+
+ADVERSA enforces a rule borrowed from adversarial ML: **the model that finds evidence and the model
+that verifies it must be independent**. The Forensic Auditor has no access to the Triage Agent's
+reasoning — it re-runs its own tool calls from scratch and demands to see bytes on disk.
+On the live case data, this caught 2 false positives the triage pass scored as HIGH confidence.
+
+Detection rules are trained the same way: a **Red Agent** generates evasion variants of known
+attack patterns, a **Blue Agent** learns to catch them. Over 3,000 iterations on ~49,500 real
+Windows Sysmon events, the system self-corrected from **10% → 75% detection rate with zero
+human intervention** after hitting a domain gap on real telemetry.
 
 ---
 
@@ -33,7 +53,8 @@ Mounted disk image  (/mnt/hostname)
 └───────────────────────────────┘
 ```
 
-Detection is backed by **11 operational rules** trained via an adversarial Red vs Blue loop on **~49,519 real Mordor/OTRF Sysmon events** across 9 MITRE ATT&CK techniques.
+Detection is backed by **11 operational rules** trained via an adversarial Red vs Blue loop on
+**~49,519 real Mordor/OTRF Sysmon events** across 9 MITRE ATT&CK techniques.
 
 ---
 
@@ -50,7 +71,8 @@ pip install anthropic mcp matplotlib numpy
 export ANTHROPIC_API_KEY="sk-ant-..."
 ```
 
-The framework requires access to a **mounted Windows disk image** at a path like `/mnt/hostname`. It reads the filesystem using standard SIFT/Sleuth Kit tools — no write access to evidence is needed.
+The framework requires access to a **mounted Windows disk image** at a path like `/mnt/hostname`.
+It reads the filesystem using standard SIFT/Sleuth Kit tools — no write access to evidence is needed.
 
 ### Run a full investigation
 
@@ -128,13 +150,21 @@ python3 fast-triage/fast_triage.py /mnt/hostname
 
 ```bash
 # Download Mordor datasets first (see DATASET.md)
-python3 custom-agent/brain.py          # adversarial training, 3000 iterations
+python3 custom-agent/brain.py            # adversarial training, 3000 iterations
 python3 custom-agent/export_patterns.py  # → operational_rules.json + sigma_rules/
 ```
 
 ---
 
 ## Results
+
+### Adversarial Training — Self-Correction Over 3,000 Iterations
+
+The system hit a domain gap at iteration ~10 when switching from synthetic to real Sysmon
+telemetry — detection collapsed from ~100% to 10%. The Red vs Blue loop autonomously recovered
+to 75% with no human intervention.
+
+![Training progression](reports/training_graphs.png)
 
 | Metric | Value |
 |--------|-------|
@@ -143,12 +173,10 @@ python3 custom-agent/export_patterns.py  # → operational_rules.json + sigma_ru
 | Precision | 69% |
 | F1 score | 0.72 |
 | MITRE techniques covered | 9 |
-| Red evasion variants | 1,245 |
+| Red evasion variants evolved | 1,245 |
 | Signals learned autonomously | 83 |
 
-**Key finding on domain gap**: Detection collapsed from ~100% → 10% when switching from synthetic to real Sysmon telemetry. The adversarial loop self-corrected to 75% over 3,000 iterations with no human intervention.
-
-**Live investigation results** (SANS FIND EVIL! 2026 case data):
+### Live Investigation — SANS FIND EVIL! 2026 Case Data
 
 | Host | Confirmed Techniques | Score | Verdict |
 |------|---------------------|-------|---------|
@@ -156,7 +184,12 @@ python3 custom-agent/export_patterns.py  # → operational_rules.json + sigma_ru
 | nfury | T1003.001, T1087.001 | 95/100 | HIGH |
 | controller | T1003.001 | 50/100 | HIGH (2 FPs caught by Auditor) |
 
-See [ACCURACY.md](ACCURACY.md) for full iteration progression and methodology. See [SUBMISSION.md](SUBMISSION.md) for hackathon submission narrative.
+The controller result is the most illustrative: the Triage Agent scored 145, flagging three
+techniques. The Forensic Auditor refuted two (legitimate svchost in WinSxS, user profile
+directory traversal). Final confirmed score: 50. One real finding, zero false accusations.
+
+See [ACCURACY.md](ACCURACY.md) for full iteration progression. See [SUBMISSION.md](SUBMISSION.md)
+for the full case walkthrough with terminal output.
 
 ---
 
@@ -164,16 +197,19 @@ See [ACCURACY.md](ACCURACY.md) for full iteration progression and methodology. S
 
 `sift_server.py` implements a **4-layer validator** before executing any forensic command:
 
-1. Hard-blocked strings (rm, dd, mkfs, overwrite patterns)
+1. Hard-blocked strings (`rm`, `dd`, `mkfs`, overwrite patterns)
 2. Binary allowlist (only approved SIFT tools can execute)
 3. Quote-aware pipe parser (no command injection through pipes)
-4. Redirect guard (no `>` writes to evidence paths)
+4. Redirect guard (`>` writes verified to land in `reports/` only)
+
+Architecture beats prompts — evidence modification is structurally impossible, not prompt-dependent.
 
 ---
 
 ## Datasets
 
-Mordor/OTRF real Windows Sysmon telemetry is not included in this repo (1.3 GB). Download instructions: [DATASET.md](DATASET.md)
+Mordor/OTRF real Windows Sysmon telemetry is not included in this repo (1.3 GB).
+Download instructions: [DATASET.md](DATASET.md)
 
 ---
 
