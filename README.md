@@ -172,18 +172,60 @@ detection with no human intervention.
 
 ---
 
-## MCP Tool Server Security
+## Security Architecture
 
 ![ADVERSA Guardrails — Anti-Hallucination Trust Chain & MCP Security Boundary](docs/adversa-guardrails.png)
 
-`sift_server.py` implements a **4-layer validator** before executing any forensic command:
+The MCP security boundary implements and exceeds the controls recommended for safe agentic shell
+access. The design principle throughout: **make bad actions structurally impossible, not
+prompt-dependent**.
 
-1. Hard-blocked strings (`rm`, `dd`, `mkfs`, overwrite patterns)
-2. Binary allowlist (only approved SIFT tools can execute)
-3. Quote-aware pipe parser (no command injection through pipes)
-4. Redirect guard (`>` writes verified to land in `reports/` only)
+**Layer 1 — Hard-blocked substrings** (`sift_server.py:78`)
+String match on the raw command before any parsing. Blocks destructive ops (`shred`, `mkfs`,
+`fdisk`, `wipefs`, `dd if=/dev/zero`), exfiltration (`wget`, `curl`, `nc`, `ssh`, `scp`),
+privilege escalation (`sudo`, `su`, `pkexec`), and command injection (`$(`, backtick). Belt
+before suspenders — catches injection before the parser runs.
 
-Architecture beats prompts — evidence modification is structurally impossible, not prompt-dependent.
+**Layer 2 — Forensic binary allowlist** (`sift_server.py:34`)
+Each segment of a pipe is parsed with `shlex.split`. The leading binary must be in an explicit
+`frozenset` of ~60 approved SIFT tools (Sleuth Kit, Volatility, YARA, RegRipper, text utils).
+Blocked by omission, not by pattern — `rm`, `chmod`, and `python3 -c` are absent from the list,
+not matched by regex. `python3 -c` (inline code execution) is additionally hard-blocked even
+though `python3` itself is allowed, closing that specific escape route.
+
+**Layer 3 — Redirect guard** (`sift_server.py:153`)
+All `>` and `>>` targets are resolved with `os.path.realpath()` and must land inside `reports/`.
+Only `/dev/null` is additionally whitelisted. Symlink traversal and `../` path injection are
+defeated at the math level — the canonical path must resolve inside `reports/`, not just start
+with it.
+
+**stdin isolation** (`sift_server.py:287`)
+All `subprocess.run` calls set `stdin=subprocess.DEVNULL`. The agent cannot read from stdin,
+closing the piped prompt injection vector.
+
+**Chain-of-custody audit log** (`sift_server.py:171`)
+Every command — allowed or blocked — is atomically appended to `reports/audit_log.jsonl` using
+raw `os.open + os.write` (not Python's buffered IO) to guarantee no partial writes. Blocked
+commands log the `blocked_reason`; successful commands log duration, returncode, and output
+preview.
+
+**Read-only evidence mounts**
+Images are mounted with `sudo mount -o ro,norecovery`. The filesystem is read-only at the kernel
+level — even if the agent constructed a command that passed all validators, the kernel would block
+any write to `/mnt/<hostname>`. Stronger than a database role because it is enforced at the
+syscall level, not the application level.
+
+**Non-root agent execution**
+The agent runs as `sansforensics`, not root. Image mounting requires `sudo` and is performed
+manually before investigation — the agent itself has no `sudo` access. The setup process and the
+investigation process run with different privileges by design.
+
+**Adversarial anti-hallucination layer**
+Above the command boundary, the Forensic Auditor provides a second architectural defense against
+LLM reasoning errors. The Auditor receives only the findings list — no access to the Triage
+Agent's reasoning — and re-runs its own tool calls independently. A finding only survives if the
+Auditor can verify it with bytes on disk. On the controller investigation this caught two false
+positives the Triage Agent scored at HIGH confidence (score reduced from 145 → 50).
 
 ---
 
@@ -231,47 +273,6 @@ process-create field coverage in this EVTX sample. T1071.001 and T1055 contain n
 signals and are excluded from the rate.
 
 Full per-signal results: `reports/evtx_cross_validation.json`
-
----
-
-## Three-Tool Platform
-
-ADVERSA is one of three independent tools covering the full evidence stack of a Windows intrusion.
-Each runs standalone; together they form a convergent detection platform.
-
-| Tool | Data layer | AI model | What it answers |
-|------|-----------|----------|-----------------|
-| **ADVERSA** | Disk image (offline) | Claude (Anthropic) | What artifacts are physically on the image? Are findings real? |
-| **[Splunk Agentic IR](https://github.com/sassom2112/splunk-agentic-ir)** | Splunk / SPL | Claude (Anthropic) | What do SIEM logs say? What's the blast radius? |
-| **[Elastic IR Agent](https://github.com/sassom2112/ir-agent)** | Elasticsearch / ES\|QL | Gemini (Google) | What does the cross-session memory say? What's the full timeline? |
-
-```
-[Alert fires]          [Splunk Agentic IR]  ──┐
-                       [Elastic IR Agent]   ──┤  converging log-layer evidence
-                                              │
-[Disk image mounted]   [ADVERSA]          ────┘  physical verification + FP elimination
-```
-
-### Export ADVERSA IOCs → Splunk SPL
-
-```bash
-python3 export_to_splunk.py reports/<hostname>-iocs.json
-```
-
-### Export ADVERSA IOCs → Elastic ES|QL
-
-```bash
-# From the splunk-agentic-ir directory (where the IOC bridge lives)
-python3 -m agent.ioc_bridge adversa-to-esql reports/<hostname>-iocs.json --index ir-events
-```
-
-### Import Splunk or Elastic findings → ADVERSA campaign mode
-
-```bash
-python3 -m agent.ioc_bridge splunk-to-adversa output/reports/INC-001.json \
-    --out /path/to/adversa/custom-agent/iocs/inc001.json
-python3 custom-agent/investigate.py /mnt/hostname
-```
 
 ---
 
