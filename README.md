@@ -76,11 +76,19 @@ What you will see:
 ### Investigate multiple hosts (campaign mode)
 
 ```bash
-# IOCs from completed hosts are automatically loaded for subsequent runs
 python3 custom-agent/investigate.py /mnt/nromanoff
-python3 custom-agent/investigate.py /mnt/nfury       # uses nromanoff IOCs
-python3 custom-agent/investigate.py /mnt/controller  # uses both
+# → writes reports/nromanoff-iocs.json
+
+python3 custom-agent/investigate.py /mnt/nfury
+# → auto-loads reports/nromanoff-iocs.json
+
+python3 custom-agent/investigate.py /mnt/controller
+# → auto-loads reports/nromanoff-iocs.json + reports/nfury-iocs.json
 ```
+
+Each run writes a `reports/<hostname>-iocs.json` file. On every subsequent run,
+`investigate.py` scans `reports/` for all IOC files from other hosts and merges
+them automatically — no flags required.
 
 ### Fast triage only (no API key, < 10 seconds)
 
