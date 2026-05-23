@@ -114,7 +114,8 @@ class ForensicAuditor:
 
     # ── Public entry point ─────────────────────────────────────────────────
 
-    async def audit(self, target_path: str, triage_report: dict) -> tuple:
+    async def audit(self, target_path: str, triage_report: dict,
+                    memory_path: str = None) -> tuple:
         """
         Audit all Triage findings in parallel — each technique gets its own
         MCP session so challenges run concurrently.
@@ -125,11 +126,12 @@ class ForensicAuditor:
             transcript (list[dict]) — full argumentation log (input order)
             adjusted_score (int)    — sum of confirmed technique weights
         """
-        host         = os.path.basename(target_path.rstrip('/'))
-        triage_score = triage_report.get('confidence_score', 0)
-        techniques   = triage_report.get('techniques_detected', [])
-        matched_sigs = triage_report.get('matched_signals', {})
-        rules        = self._load_rules()
+        host             = os.path.basename(target_path.rstrip('/'))
+        triage_score     = triage_report.get('confidence_score', 0)
+        techniques       = triage_report.get('techniques_detected', [])
+        matched_sigs     = triage_report.get('matched_signals', {})
+        technique_sources = triage_report.get('technique_sources', {})
+        rules            = self._load_rules()
 
         print(f"\n{'═'*60}")
         print(f"  FORENSIC AUDITOR  —  {target_path}")
@@ -150,6 +152,8 @@ class ForensicAuditor:
                 matched_sigs.get(finding_id, []),
                 rules,
                 print_lock,
+                source=technique_sources.get(finding_id, 'disk'),
+                memory_path=memory_path,
             )
             for finding_id in techniques
         ])
@@ -209,6 +213,8 @@ class ForensicAuditor:
         signals: list,
         rules: dict,
         print_lock: asyncio.Lock,
+        source: str = 'disk',
+        memory_path: str = None,
     ) -> dict:
         """
         Audit a single finding with its own MCP session.
@@ -248,6 +254,8 @@ class ForensicAuditor:
                             finding_id, finding_name, signals,
                             target_path, challenge_history,
                             signal_tier=signal_tier,
+                            source=source,
+                            memory_path=memory_path,
                         )
 
                     challenge_history.append({
@@ -291,13 +299,16 @@ class ForensicAuditor:
             elif final_verdict == 'REFUTED':
                 print(f"     [{finding_id}] => REFUTED   (removed from adjusted score)")
             else:
-                print(f"     [{finding_id}] => INCONCLUSIVE (artifact not located on disk)")
+                domain = 'memory' if source == 'memory' else 'disk'
+                print(f"     [{finding_id}] => INCONCLUSIVE "
+                      f"(artifact not located in {domain})")
 
         return {
             'finding_id':         finding_id,
             'finding_name':       finding_name,
             'triage_signals':     signals,
             'triage_weight':      weight,
+            'source':             source,
             'challenges':         challenge_history,
             'final_verdict':      final_verdict,
             'convergence_reason': convergence,
@@ -310,6 +321,8 @@ class ForensicAuditor:
         finding_id: str, finding_name: str, triage_signals: list,
         target_path: str, prior_challenges: list,
         signal_tier: str = 'mixed',
+        source: str = 'disk',
+        memory_path: str = None,
     ) -> tuple:
         """
         One bounded challenge round (≤ MAX_TOOLS_PER_CHALLENGE tool calls).
@@ -344,18 +357,43 @@ class ForensicAuditor:
                 'strings on suspicious binaries, grep on registry hives.'
             )
 
+        # Source-aware verification guidance
+        if source == 'memory' and memory_path:
+            source_guidance = (
+                f"This finding came from MEMORY analysis (Volatility 3). "
+                f"Verify using vol.py against the memory image:\n"
+                f"  vol.py -q -f {memory_path} windows.malfind 2>/dev/null\n"
+                f"  vol.py -q -f {memory_path} windows.cmdline 2>/dev/null\n"
+                f"  vol.py -q -f {memory_path} windows.netscan 2>/dev/null\n"
+                f"  vol.py -q -f {memory_path} windows.hashdump 2>/dev/null\n"
+                f"Also cross-check on disk: find {target_path} -iname '<artifact>' 2>/dev/null"
+            )
+        elif source == 'disk+memory' and memory_path:
+            source_guidance = (
+                f"This finding was corroborated in BOTH disk and memory. "
+                f"Confirm with disk SIFT commands on {target_path} "
+                f"AND vol.py -q -f {memory_path} <plugin> 2>/dev/null. "
+                f"Corroboration across both domains raises confidence significantly."
+            )
+        else:
+            source_guidance = (
+                f"This finding came from DISK analysis. "
+                f"Verify using SIFT commands on the mounted image at {target_path}."
+            )
+
         messages = [{
             'role': 'user',
             'content': (
                 f"Target image: {target_path}\n"
                 f"Finding: {finding_id} ({finding_name})\n"
+                f"Source: {source}\n"
                 f"Triage matched signals: {triage_signals}\n"
                 f"Signal tier: {signal_tier}. {tier_guidance}\n"
+                f"{source_guidance}\n"
                 f"Prior challenge rounds:\n{prior_summary}\n\n"
-                f"Challenge this finding using run_terminal_command to run raw SIFT "
-                f"forensic commands (find, strings, grep, md5sum) directly on the image. "
-                f"The Triage typed-tool results are already collected — go deeper with "
-                f"independent CLI verification. Call up to {MAX_TOOLS_PER_CHALLENGE} "
+                f"Challenge this finding with run_terminal_command. "
+                f"Use vol.py for memory artifacts, SIFT commands for disk artifacts. "
+                f"Call up to {MAX_TOOLS_PER_CHALLENGE} "
                 f"tools to PROVE or DISPROVE this technique was used on this host. "
                 f"End with: VERDICT: <CONFIRMED|REFUTED|INCONCLUSIVE>"
             ),

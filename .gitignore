@@ -37,6 +37,7 @@ reports/*-investigation.json
 reports/*-report.html
 reports/*-auditor-transcript.json
 reports/*-custom-agent-report.json
+reports/*-memory-triage-report.json
 reports/*-iocs.json
 reports/shield-campaign-iocs.json
 reports/audit_log*.json
