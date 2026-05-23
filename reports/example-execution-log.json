@@ -1,5 +1,5 @@
 {
-  "description": "Example agent execution log showing ADVERSA dual-agent pipeline structure. Host and case data anonymized. Timestamps and token counts are representative of real runs.",
+  "description": "Example agent execution log showing ADVERSA dual-agent pipeline structure. All host, case, and IOC data is synthetic. Timestamps and token counts are representative of real runs.",
   "host": "example-host",
   "pipeline": "Triage Agent -> Forensic Auditor",
   "framework": "ADVERSA — Adversarial Signal Learning",
@@ -17,23 +17,23 @@
       {
         "ts": "2026-05-19T00:00:03Z",
         "tool": "run_terminal_command",
-        "command": "grep -r 'hydrakatz\\|spinlock\\|mimikatz\\|sekurlsa' /mnt/example-host/Windows/ 2>/dev/null",
+        "command": "grep -r 'mimikatz\\|sekurlsa\\|comsvcs' /mnt/example-host/Windows/ 2>/dev/null",
         "bytes_returned": 2341,
         "tokens_used": 487
       },
       {
         "ts": "2026-05-19T00:00:05Z",
         "tool": "run_terminal_command",
-        "command": "grep -ri 'psexesvc\\|psexec' /mnt/example-host/Windows/ 2>/dev/null",
+        "command": "grep -ri 'psexec\\|\\\\admin\\$\\\\' /mnt/example-host/Windows/ 2>/dev/null",
         "bytes_returned": 677,
         "tokens_used": 215
       }
     ],
     "pass1_score": 67,
     "pass1_hits": {
-      "T1003.001": ["hydrakatz", "lsass"],
-      "T1569.002": ["PSEXESVC.EXE"],
-      "T1071.001": ["12.190.135.235"]
+      "T1003.001": ["mimikatz", "sekurlsa"],
+      "T1569.002": ["psexec", "\\admin$\\"],
+      "T1087.001": ["net user /domain", "samr"]
     },
     "pass2_tool_log": [
       {
@@ -47,7 +47,7 @@
       {
         "ts": "2026-05-19T00:00:45Z",
         "tool": "run_terminal_command",
-        "command": "python3 /opt/zimmermantools/EvtxeCmd/EvtxECmd.dll -d /mnt/example-host/Windows/System32/winevt/Logs --csv /tmp/evtx_out 2>/dev/null",
+        "command": "fls -r -p /mnt/example-host | grep -i 'System32' 2>/dev/null",
         "bytes_returned": 8912,
         "tokens_used": 1203,
         "call_number": 8
@@ -55,7 +55,7 @@
       {
         "ts": "2026-05-19T00:01:30Z",
         "tool": "run_terminal_command",
-        "command": "grep -i 'T1059\\|cmd.exe\\|powershell' /mnt/example-host/Windows/Prefetch/ 2>/dev/null",
+        "command": "grep -i 'invoke-expression\\|powershell -enc' /mnt/example-host/Windows/Prefetch/ 2>/dev/null",
         "bytes_returned": 1876,
         "tokens_used": 634,
         "call_number": 26,
@@ -71,13 +71,13 @@
       {
         "finding_id": "T1003.001",
         "technique_name": "OS Credential Dumping: LSASS Memory",
-        "triage_claim": "hydrakatz.exe and lsass access detected",
+        "triage_claim": "credential dumping tooling and lsass access detected",
         "challenges": [
           {
             "round": 1,
             "ts": "2026-05-19T00:08:14Z",
-            "auditor_command": "grep -r 'hydrakatz' /mnt/example-host/Windows/System32/ 2>/dev/null",
-            "result_snippet": "hydrakatz.exe: PE32 executable found at /mnt/example-host/Windows/System32/hydrakatz.exe",
+            "auditor_command": "find /mnt/example-host -name 'mimikatz.exe' 2>/dev/null",
+            "result_snippet": "mimikatz.exe: PE32 executable found at /mnt/example-host/Windows/System32/mimikatz.exe",
             "verdict": "CONFIRMED",
             "tokens_used": 743
           }
@@ -113,7 +113,7 @@
       }
     ],
     "confirmed_findings": ["T1003.001"],
-    "inconclusive_findings": ["T1071.001"],
+    "inconclusive_findings": ["T1087.001"],
     "refuted_findings": ["T1036.005"],
     "adjusted_score": 35,
     "total_argumentation_rounds": 5
