@@ -33,7 +33,7 @@ _REPORTS = os.path.normpath(os.path.join(_HERE, '..', 'reports'))
 # vol.py invocation — override with VOL_PATH if not in PATH
 _VOL = os.environ.get('VOL_PATH', '/opt/volatility3/bin/vol')
 
-MAX_AGENT_TOOLS = 40   # memory pass 2 is cheaper — focused vol.py queries
+MAX_AGENT_TOOLS = 60   # memory pass 2: vol.py queries + final synthesis
 
 # ── Memory-domain ATT&CK patterns ────────────────────────────────────────────
 # Signals are strings that appear in actual Volatility 3 plugin output,
@@ -401,7 +401,9 @@ async def investigate(memory_path: str, host: str,
 
                     messages.append({'role': 'user', 'content': tool_results})
 
-                # Extract prose analysis from final assistant message
+                # Try to extract prose from the last assistant message.
+                # If the loop ended on a tool call (budget exhausted), force a
+                # final synthesis response so the report always has a narrative.
                 for block in reversed(messages):
                     if block.get('role') == 'assistant':
                         for b in block.get('content', []):
@@ -409,6 +411,29 @@ async def investigate(memory_path: str, host: str,
                                 analysis_text = b.text
                                 break
                         break
+
+                if not analysis_text:
+                    print(f"  [M2] Budget exhausted — requesting synthesis...")
+                    synth = client.messages.create(
+                        model='claude-opus-4-7',
+                        max_tokens=1024,
+                        system=_AGENT_SYSTEM,
+                        messages=messages + [{
+                            'role': 'user',
+                            'content': (
+                                'Your tool budget is exhausted. Write a concise forensic '
+                                'analyst summary (3-5 paragraphs) of what you found: '
+                                'suspicious processes, injected memory regions, network '
+                                'connections, credential access, and persistence. '
+                                'Cite specific PIDs, addresses, or registry keys. '
+                                'Do not call any more tools.'
+                            ),
+                        }],
+                    )
+                    for b in synth.content:
+                        if hasattr(b, 'type') and b.type == 'text':
+                            analysis_text = b.text
+                            break
 
                 elapsed2 = (datetime.now(timezone.utc) - t2).total_seconds()
                 print(f"\n  Memory Pass 2 complete: {tool_call_count} calls, "
