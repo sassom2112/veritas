@@ -23,9 +23,34 @@ _DEFAULT_STATE = os.path.join(_REPORTS, 'brain_state.json')
 _DEFAULT_OUTPUT = os.path.join(_REPORTS, 'operational_rules.json')
 
 
+def _load_domain_rules(state_path: str, domain: str, min_weight: int) -> tuple[dict, int]:
+    """Read brain state and return (rules_dict, iteration)."""
+    if not os.path.exists(state_path):
+        return {}, 0
+    with open(state_path) as f:
+        state = json.load(f)
+    patterns = state.get('blue_patterns', {})
+    evasions = state.get('red_evasions', {})
+    iteration = state.get('iteration', 0)
+    rules = {}
+    for tid, data in patterns.items():
+        w = data.get('weight', 0)
+        s = data.get('signals', [])
+        if w >= min_weight and s:
+            rules[tid] = {
+                'name':          data.get('name', tid),
+                'signals':       s,
+                'weight':        w,
+                'evasions_seen': len(evasions.get(tid, [])),
+                'source':        domain,
+            }
+    return rules, iteration
+
+
 def export_patterns(state_path=None,
                     output_path=None,
-                    min_weight=35):
+                    min_weight=35,
+                    disk_state_path=None):
     if state_path is None:
         state_path = _DEFAULT_STATE
     if output_path is None:
@@ -55,21 +80,45 @@ def export_patterns(state_path=None,
                 'signals': signals,
                 'weight': weight,
                 'evasions_seen': len(evasions.get(technique_id, [])),
-                'source': 'GAN_trained',
+                'source': 'asl_trained',
             }
         else:
             skipped.append(f"{technique_id} (weight={weight})")
 
+    # ── Merge disk-domain patterns if --disk-state provided ────────────────
+    disk_rules, disk_iter = {}, 0
+    if disk_state_path:
+        disk_rules, disk_iter = _load_domain_rules(
+            disk_state_path, 'disk_domain', min_weight
+        )
+        for tid, drule in disk_rules.items():
+            if tid in operational_rules:
+                # Merge signals, keeping unique values, source = both
+                existing  = operational_rules[tid]
+                merged_sigs = list(dict.fromkeys(
+                    existing['signals'] + drule['signals']
+                ))
+                operational_rules[tid] = {
+                    **existing,
+                    'signals':  merged_sigs,
+                    'weight':   max(existing['weight'], drule['weight']),
+                    'source':   'asl_trained+disk_domain',
+                }
+            else:
+                operational_rules[tid] = drule
+        print(f"Disk-domain rules:   {len(disk_rules)} (iteration {disk_iter})")
+
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, 'w') as f:
         json.dump({
-            'exported_at': datetime.now(timezone.utc).isoformat(),
-            'trained_iterations': iteration,
+            'exported_at':         datetime.now(timezone.utc).isoformat(),
+            'trained_iterations':  iteration,
+            'disk_iterations':     disk_iter,
             'min_weight_threshold': min_weight,
-            'rules': operational_rules,
+            'rules':               operational_rules,
         }, f, indent=2)
 
-    print(f"GAN training iteration: {iteration}")
+    print(f"Sysmon training iter: {iteration}")
     print(f"Exported {len(operational_rules)} operational rules → {output_path}")
     if skipped:
         print(f"Skipped (below threshold): {', '.join(skipped)}")
@@ -77,7 +126,7 @@ def export_patterns(state_path=None,
     for tid, data in operational_rules.items():
         evaded = data['evasions_seen']
         print(f"  {tid} ({data['name']})")
-        print(f"    weight={data['weight']}  evasions_seen={evaded}")
+        print(f"    weight={data['weight']}  evasions_seen={evaded}  source={data['source']}")
         print(f"    signals: {data['signals']}")
 
     return operational_rules
@@ -87,12 +136,15 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--min-weight', type=int, default=35)
     parser.add_argument('--state', default=_DEFAULT_STATE)
+    parser.add_argument('--disk-state', default=None,
+                        help='Forensic-domain brain state to merge (forensic_brain_state.json)')
     parser.add_argument('--output', default=_DEFAULT_OUTPUT)
     parser.add_argument('--no-sigma', action='store_true',
                         help='Skip Sigma rule generation after export')
     args = parser.parse_args()
 
-    rules = export_patterns(args.state, args.output, args.min_weight)
+    rules = export_patterns(args.state, args.output, args.min_weight,
+                            disk_state_path=args.disk_state)
 
     if rules and not args.no_sigma:
         print('\n── Sigma rule generation ──')

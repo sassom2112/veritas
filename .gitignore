@@ -31,6 +31,10 @@ reports/patterns.db
 reports/brain_state.json
 reports/brain_state.json.bak
 reports/brain_state.json.corrupted
+reports/forensic_brain_state.json
+
+# Forensic training datasets (download via forensic_data_agent.py)
+datasets/forensic/
 
 # Case-specific investigation output (contains victim/suspect data)
 reports/*-investigation.json
