@@ -409,6 +409,10 @@ Examples:
 
     # Resolve no-synthesis alias
     no_synthesis = args.triage or args.no_synthesis
+    if no_synthesis:
+        print("\n  ⚡ TRIAGE MODE — deterministic Pass 1 only, no agentic loop.")
+        print("     Use for bulk screening. Run without --triage for full investigation.")
+        print("     False negative rate is significant on EVTX-heavy cases (e.g. nfury).\n")
 
     # ── Case-discovery mode ──────────────────────────────────────────────────
     if args.case:

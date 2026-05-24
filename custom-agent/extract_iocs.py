@@ -30,17 +30,32 @@ _FNAME_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Patterns that signal an account name in prose or tool output
+# Patterns that signal an account name in prose or tool output.
+# Anchored tightly to avoid matching prose words like "manipulation", "creation".
 _ACCOUNT_PATTERNS = [
-    re.compile(r'(?:username|user name|account name|account)[:\s]+([A-Za-z][A-Za-z0-9_\-.]{1,29})', re.I),
-    re.compile(r'(?:Users|Profiles)[/\\]([A-Za-z][A-Za-z0-9_\-.]{1,29})', re.I),
-    re.compile(r'(?:logged on as|running as|context)[:\s]+([A-Za-z][A-Za-z0-9_\-.]{1,29})', re.I),
-    re.compile(r'RID[:\s]+\d+.*?(?:username|name)[:\s]+([A-Za-z][A-Za-z0-9_\-.]{1,29})', re.I),
+    re.compile(r'(?:username|user name|account name)[:\s]+([A-Za-z][A-Za-z0-9_\-.]{2,29})', re.I),
+    re.compile(r'(?:Users|Profiles)[/\\]([A-Za-z][A-Za-z0-9_\-.]{2,29})(?:[/\\]|$)', re.I),
+    re.compile(r'(?:logged on as|running as)[:\s]+([A-Za-z][A-Za-z0-9_\-.]{2,29})', re.I),
+    re.compile(r'RID[:\s]+\d+[^\n]*?Name\s*:\s*([A-Za-z][A-Za-z0-9_\-.]{2,29})', re.I),
 ]
 _ACCOUNT_BORING = frozenset({
     'system', 'administrator', 'admin', 'network', 'local', 'service',
     'domain', 'user', 'account', 'default', 'guest', 'public', 'users',
     'everyone', 'interactive', 'authenticated', 'creator', 'owner',
+    # Common prose words that appear near "account" in forensic analysis text
+    'manipulation', 'creation', 'manager', 'changes', 'activity', 'type',
+    'enabled', 'disabled', 'created', 'changed', 'suggests', 'credentials',
+    'for', 'or', 'with', 'which', 'versus', 'the', 'and',
+})
+
+# Legitimate Windows system binaries — never IOCs
+_BORING_FILENAMES = frozenset({
+    'svchost.exe', 'lsass.exe', 'explorer.exe', 'services.exe', 'csrss.exe',
+    'winlogon.exe', 'smss.exe', 'wininit.exe', 'spoolsv.exe', 'taskmgr.exe',
+    'conhost.exe', 'logonui.exe', 'rundll32.exe', 'regsvr32.exe', 'cmd.exe',
+    'powershell.exe', 'msiexec.exe', 'dllhost.exe', 'taskhost.exe',
+    'ntoskrnl.exe', 'hal.dll', 'ntdll.dll', 'kernel32.dll', 'user32.dll',
+    'advapi32.dll', 'msvcrt.dll', 'shell32.dll', 'ole32.dll', 'rpcrt4.dll',
 })
 
 # Techniques associated with account discovery / creation
@@ -66,9 +81,9 @@ def _extract_from_text(text: str, iocs: dict) -> None:
 
     for m in _FNAME_RE.finditer(text):
         fname = m.group(1).lower()
-        if fname not in iocs['filenames'] and not any(
-            fname.startswith(p) for p in ('setup', 'install', 'update', 'msi')
-        ):
+        if (fname not in iocs['filenames']
+                and fname not in _BORING_FILENAMES
+                and not any(fname.startswith(p) for p in ('setup', 'install', 'update', 'msi'))):
             iocs['filenames'].append(fname)
 
 
@@ -144,6 +159,7 @@ def extract_iocs(host: str, reports_dir: str) -> dict:
     matched = triage.get('matched_signals', {})
 
     # Confirmed signals → definite IOCs
+    _REG_RE = re.compile(r'^HK(?:LM|CU|U|CR|CC)[\\]', re.I)
     for tid in confirmed_ids:
         for sig in matched.get(tid, []):
             if re.match(r'\d+\.\d+\.\d+\.\d+', sig) and _is_routable(sig):
@@ -151,9 +167,9 @@ def extract_iocs(host: str, reports_dir: str) -> dict:
                     iocs['c2_ips'].append(sig)
             elif re.search(r'\.(?:exe|dll|bin|dmp|ps1)$', sig, re.I):
                 fname = os.path.basename(sig).lower()
-                if fname not in iocs['filenames']:
+                if fname not in _BORING_FILENAMES and fname not in iocs['filenames']:
                     iocs['filenames'].append(fname)
-            elif '\\' in sig and sig not in iocs['registry_keys']:
+            elif _REG_RE.match(sig) and sig not in iocs['registry_keys']:
                 iocs['registry_keys'].append(sig)
 
     # Inconclusive signals for account/C2 techniques → candidate IOCs

@@ -36,8 +36,8 @@ logging.getLogger('mcp').setLevel(logging.WARNING)
 _HERE    = os.path.dirname(os.path.abspath(__file__))
 _REPORTS = os.path.normpath(os.path.join(_HERE, '..', 'reports'))
 
-MAX_CHALLENGES_PER_FINDING = 3
-MAX_TOOLS_PER_CHALLENGE    = 2
+MAX_CHALLENGES_PER_FINDING = 5   # raised from 3 — prevents budget_exhausted on T1055/T1134/T1547
+MAX_TOOLS_PER_CHALLENGE    = 3   # raised from 2 — allows richer per-round verification
 
 _CYNIC_SYSTEM = """\
 You are The Forensic Auditor (The Cynic) — a second-opinion agent in a
