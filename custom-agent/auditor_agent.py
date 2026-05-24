@@ -322,6 +322,7 @@ class ForensicAuditor:
                     if verdict == 'CONFIRMED':
                         any_confirmed = True
                         convergence   = f'positive_evidence_round_{rnd}'
+                        break   # no need to keep challenging confirmed evidence
                     elif verdict == 'REFUTED':
                         final_verdict = 'REFUTED'
                         convergence   = f'contradiction_round_{rnd}'

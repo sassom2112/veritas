@@ -659,10 +659,18 @@ Never list a technique without citing the raw evidence that supports it. No spec
                                     'output':   output[:3000],
                                 })
 
+                            # Truncate in the message history to control context growth.
+                            # Full output is kept in tool_outputs (for parse_findings)
+                            # and pass2_tool_log (for the HTML report).
+                            _MAX_TOOL_CTX = 4000
+                            ctx_output = (
+                                output if len(output) <= _MAX_TOOL_CTX
+                                else output[:_MAX_TOOL_CTX] + f'\n[...truncated {len(output)-_MAX_TOOL_CTX} chars]'
+                            )
                             tool_results.append({
                                 'type':        'tool_result',
                                 'tool_use_id': block.id,
-                                'content':     output,
+                                'content':     ctx_output,
                             })
 
                         messages.append({'role': 'user', 'content': tool_results})
