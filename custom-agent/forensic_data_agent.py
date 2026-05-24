@@ -100,7 +100,9 @@ TECHNIQUE_SEARCHES = {
 # MalwareBazaar client (no API key required)
 # ---------------------------------------------------------------------------
 
-_mb_last = 0.0
+_mb_last   = 0.0
+_mb_api_key = ''   # set via MALWAREBAZAAR_API_KEY env var
+
 
 def _mb_post(body: dict) -> dict:
     global _mb_last
@@ -109,14 +111,15 @@ def _mb_post(body: dict) -> dict:
         time.sleep(_MB_INTERVAL - elapsed)
     _mb_last = time.time()
 
-    data = urllib.parse.urlencode(body).encode()
-    req  = urllib.request.Request(
-        MB_BASE, data=data,
-        headers={
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'User-Agent':   'ADVERSA-forensic-trainer/1.0',
-        },
-    )
+    data    = urllib.parse.urlencode(body).encode()
+    headers = {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent':   'ADVERSA-forensic-trainer/1.0',
+    }
+    if _mb_api_key:
+        headers['Auth-Key'] = _mb_api_key
+
+    req = urllib.request.Request(MB_BASE, data=data, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
             return json.loads(r.read())
@@ -429,7 +432,14 @@ def main():
                         help='Test whether HA report endpoint works with your key')
     args = parser.parse_args()
 
-    api_key = os.environ.get('HYBRID_ANALYSIS_API_KEY', '')
+    global _mb_api_key
+    _mb_api_key = os.environ.get('MALWAREBAZAAR_API_KEY', '')
+    api_key     = os.environ.get('HYBRID_ANALYSIS_API_KEY', '')
+
+    if _mb_api_key:
+        print(f'MalwareBazaar: authenticated (Auth-Key set)')
+    else:
+        print(f'MalwareBazaar: unauthenticated (set MALWAREBAZAAR_API_KEY for higher limits)')
 
     if args.test_ha:
         if not api_key:
