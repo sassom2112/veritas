@@ -53,42 +53,42 @@ _INITIAL_PATTERNS: dict[str, dict] = {
     'T1003.001': {
         'name': 'Credential Dumping (LSASS)',
         'signals': ['mimikatz', 'sekurlsa', 'lsass.dmp', 'procdump', 'comsvcs.dll'],
-        'weight': 35,
+        'weight': 45,
     },
     'T1547.001': {
         'name': 'Registry Run Key',
         'signals': ['currentversion\\run', 'currentversion\\runonce', 'dllhost\\svchost'],
-        'weight': 35,
+        'weight': 45,
     },
     'T1569.002': {
         'name': 'PsExec',
         'signals': ['psexesvc', 'psexec', '\\\\admin$', 'remcomsvc'],
-        'weight': 35,
+        'weight': 45,
     },
     'T1036.005': {
         'name': 'Binary Masquerading',
         'signals': ['102400', 'dllhost\\svchost.exe', 'upx', 'wrong imports'],
-        'weight': 35,
+        'weight': 45,
     },
     'T1087.001': {
         'name': 'Account Discovery',
         'signals': ['seatbelt', 'sharpview', 'enumdomainusers', 'getdomaingroup', 'bloodhound'],
-        'weight': 35,
+        'weight': 45,
     },
     'T1059.001': {
         'name': 'PowerShell Execution',
         'signals': ['invoke-expression', 'frombase64string', 'powershell -enc', 'iex'],
-        'weight': 35,
+        'weight': 45,
     },
     'T1548.002': {
         'name': 'UAC Bypass',
         'signals': ['fodhelper', 'sdclt', 'ms-settings\\shell\\open', 'eventvwr'],
-        'weight': 35,
+        'weight': 45,
     },
     'T1560.001': {
         'name': 'Data Archival',
         'signals': ['winrar', 'rar.exe', '7za.exe', '.rar', '.7z'],
-        'weight': 35,
+        'weight': 45,
     },
 }
 
@@ -219,7 +219,10 @@ class ForensicBlueAgent:
             if hit_rate > 0.8:
                 self.patterns[tid]['weight'] = min(old_w + 5, 50)
             elif hit_rate < 0.3:
-                self.patterns[tid]['weight'] = max(old_w - 5, 28)
+                # Floor at 40 so 2+ signal matches always clear the detection threshold.
+                # Dropping below 40 would create a death spiral: misses → lower weight
+                # → harder to detect → more misses.
+                self.patterns[tid]['weight'] = max(old_w - 5, 40)
 
             # Prune only after enough observations
             tech_hist = [h for h in history if h['technique'] == tid]
