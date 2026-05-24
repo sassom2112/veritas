@@ -405,7 +405,8 @@ def run_volatility(memory_image: str, plugin: str, extra_args: str = '') -> dict
     if not re.match(r'^[\w.]+$', plugin):
         return {'error': f'Invalid plugin name: {plugin!r}'}
 
-    cmd = f"python3 /opt/volatility3-2.20.0/vol.py -f '{memory_image}' {plugin}"
+    _vol = os.environ.get('VOL_PATH', '/opt/volatility3/bin/vol')
+    cmd = f"{_vol} -q -f '{memory_image}' {plugin}"
     if extra_args:
         cmd += f' {extra_args}'
 

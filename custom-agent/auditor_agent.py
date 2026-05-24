@@ -404,17 +404,17 @@ class ForensicAuditor:
             source_guidance = (
                 f"This finding came from MEMORY analysis (Volatility 3). "
                 f"Verify using vol.py against the memory image:\n"
-                f"  vol.py -q -f {memory_path} windows.malfind 2>/dev/null\n"
-                f"  vol.py -q -f {memory_path} windows.cmdline 2>/dev/null\n"
-                f"  vol.py -q -f {memory_path} windows.netscan 2>/dev/null\n"
-                f"  vol.py -q -f {memory_path} windows.hashdump 2>/dev/null\n"
+                f"  /opt/volatility3/bin/vol -q -f {memory_path} windows.malfind 2>/dev/null\n"
+                f"  /opt/volatility3/bin/vol -q -f {memory_path} windows.cmdline 2>/dev/null\n"
+                f"  /opt/volatility3/bin/vol -q -f {memory_path} windows.netscan 2>/dev/null\n"
+                f"  /opt/volatility3/bin/vol -q -f {memory_path} windows.hashdump 2>/dev/null\n"
                 f"Also cross-check on disk: find {target_path} -iname '<artifact>' 2>/dev/null"
             )
         elif source == 'disk+memory' and memory_path:
             source_guidance = (
                 f"This finding was corroborated in BOTH disk and memory. "
                 f"Confirm with disk SIFT commands on {target_path} "
-                f"AND vol.py -q -f {memory_path} <plugin> 2>/dev/null. "
+                f"AND /opt/volatility3/bin/vol -q -f {memory_path} <plugin> 2>/dev/null. "
                 f"Corroboration across both domains raises confidence significantly."
             )
         else:
