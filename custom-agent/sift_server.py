@@ -33,7 +33,7 @@ _AUDIT_LOG = os.path.join(_REPORTS, 'audit_log.jsonl')
 # ── Comprehensive SIFT binary allowlist ──────────────────────────────────────
 _ALLOWED_BINARIES = frozenset({
     # ── Volatility 3 ──
-    'vol.py',
+    'vol.py', 'vol',   # vol = /opt/volatility3/bin/vol on SIFT
     # ── Sleuth Kit ──
     'fls', 'icat', 'ils', 'mmls', 'fsstat', 'blkls', 'mactime',
     'tsk_recover', 'img_stat', 'srch_strings', 'tsk_comparedir', 'sigfind',
@@ -336,7 +336,7 @@ def run_terminal_command(command: str) -> str:
       find /mnt/nfury -iname 'mimikatz.exe' 2>/dev/null
       strings /mnt/nfury/Windows/System32/spinlock.exe 2>/dev/null | head -60
       rip.pl -r /mnt/nfury/Windows/System32/config/SOFTWARE -f run 2>/dev/null
-      python3 /opt/volatility3-2.20.0/vol.py -f /cases/mem.raw windows.pslist
+      /opt/volatility3/bin/vol -q -f /cases/mem.raw windows.pslist
       yara /path/to/rules.yar /mnt/nfury 2>/dev/null
       fls -r /dev/sdb1 | grep -i psexec
     """
