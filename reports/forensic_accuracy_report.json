@@ -1,88 +1,88 @@
 {
-  "generated": "2026-05-24T02:45:20.453998+00:00",
+  "generated": "2026-05-24T05:34:43.554870+00:00",
   "domain": "disk_forensic",
-  "total_iterations": 1000,
+  "total_iterations": 1500,
   "techniques": {
     "T1003.001": {
       "name": "Credential Dumping (LSASS)",
-      "detection_rate": "83%",
-      "hits": 73,
-      "misses": 15,
-      "final_weight": 50,
+      "detection_rate": "71%",
+      "hits": 95,
+      "misses": 38,
+      "final_weight": 45,
       "patterns_learned": 5,
       "red_evasions": 0
     },
     "T1547.001": {
       "name": "Registry Run Key",
-      "detection_rate": "59%",
-      "hits": 52,
-      "misses": 36,
+      "detection_rate": "56%",
+      "hits": 75,
+      "misses": 58,
       "final_weight": 50,
       "patterns_learned": 3,
       "red_evasions": 0
     },
     "T1569.002": {
       "name": "PsExec",
-      "detection_rate": "89%",
-      "hits": 78,
-      "misses": 10,
+      "detection_rate": "91%",
+      "hits": 121,
+      "misses": 12,
       "final_weight": 50,
       "patterns_learned": 4,
       "red_evasions": 0
     },
     "T1036.005": {
       "name": "Binary Masquerading",
-      "detection_rate": "0%",
-      "hits": 0,
-      "misses": 87,
+      "detection_rate": "2%",
+      "hits": 2,
+      "misses": 130,
       "final_weight": 40,
-      "patterns_learned": 2,
+      "patterns_learned": 3,
       "red_evasions": 0
     },
     "T1087.001": {
       "name": "Account Discovery",
-      "detection_rate": "54%",
-      "hits": 47,
-      "misses": 40,
+      "detection_rate": "58%",
+      "hits": 77,
+      "misses": 55,
       "final_weight": 50,
-      "patterns_learned": 5,
+      "patterns_learned": 4,
       "red_evasions": 0
     },
     "T1059.001": {
       "name": "PowerShell Execution",
-      "detection_rate": "57%",
-      "hits": 49,
-      "misses": 37,
+      "detection_rate": "67%",
+      "hits": 87,
+      "misses": 43,
       "final_weight": 50,
       "patterns_learned": 3,
       "red_evasions": 0
     },
     "T1548.002": {
       "name": "UAC Bypass",
-      "detection_rate": "70%",
-      "hits": 60,
-      "misses": 26,
-      "final_weight": 45,
+      "detection_rate": "77%",
+      "hits": 100,
+      "misses": 30,
+      "final_weight": 50,
       "patterns_learned": 4,
       "red_evasions": 0
     },
     "T1560.001": {
       "name": "Data Archival",
-      "detection_rate": "65%",
-      "hits": 56,
-      "misses": 30,
+      "detection_rate": "74%",
+      "hits": 96,
+      "misses": 34,
       "final_weight": 50,
       "patterns_learned": 5,
       "red_evasions": 0
     }
   },
   "overall": {
-    "detection_rate": "60%",
-    "total_tests": 696,
-    "detections": 415,
+    "detection_rate": "62%",
+    "total_tests": 1053,
+    "detections": 653,
     "false_positives": 0,
     "precision": "100%",
-    "recall": "60%",
-    "f1_score": "0.75"
+    "recall": "62%",
+    "f1_score": "0.77"
   }
 }

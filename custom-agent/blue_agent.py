@@ -214,7 +214,7 @@ def load_operational_rules(rules_path=None):
             data = json.load(f)
         rules = data.get('rules', {})
         iterations = data.get('trained_iterations', 0)
-        print(f"🧠 Loaded {len(rules)} ASL-trained rules "
+        print(f"🧠 Loaded {len(rules)} operational rules "
               f"(from iteration {iterations})")
         return rules
     print("⚠️  No trained rules found — using base IOC patterns")
