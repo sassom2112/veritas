@@ -9,7 +9,7 @@ Volatility 3 based memory analysis — mirrors blue_agent.py two-pass structure.
 Output: reports/{host}-memory-triage-report.json
 
 vol.py must be in PATH on the SIFT workstation, or set VOL_PATH env var:
-    export VOL_PATH=/opt/volatility3/vol.py
+    export VOL_PATH=/opt/volatility3/bin/vol
 """
 
 import asyncio
@@ -31,7 +31,7 @@ _HERE    = os.path.dirname(os.path.abspath(__file__))
 _REPORTS = os.path.normpath(os.path.join(_HERE, '..', 'reports'))
 
 # vol.py invocation — override with VOL_PATH if not in PATH
-_VOL = os.environ.get('VOL_PATH', 'vol.py')
+_VOL = os.environ.get('VOL_PATH', '/opt/volatility3/bin/vol')
 
 MAX_AGENT_TOOLS = 40   # memory pass 2 is cheaper — focused vol.py queries
 
