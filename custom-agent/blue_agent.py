@@ -16,7 +16,19 @@ logging.getLogger('mcp').setLevel(logging.WARNING)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sift_server import windows_dir, system32_dir, config_dir, profiles_dir, config_hive
 
-_REPORTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'reports')
+_REPORTS   = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'reports')
+_DATA_DIR  = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
+_CAL_PATH  = os.path.join(_DATA_DIR, 'calibrated_weights.json')
+
+# Load calibrated signal weights produced by compute_weights.py (empty dict if not yet built)
+_CAL_WEIGHTS: dict = {}
+if os.path.exists(_CAL_PATH):
+    try:
+        with open(_CAL_PATH) as _f:
+            _CAL_WEIGHTS = json.load(_f)
+        print(f"🎯 Calibrated weights loaded ({len(_CAL_WEIGHTS)} techniques)")
+    except Exception as _e:
+        print(f"⚠️  calibrated_weights.json unreadable: {_e}")
 
 KNOWN_IOCS = {
     'c2_ips': ['12.190.135.235', '199.73.28.114'],
@@ -262,6 +274,16 @@ BASE_PATTERNS = {
 }
 
 
+def _signal_matches(sig: str, text: str) -> bool:
+    """Precise match: word boundaries for short single tokens, substring for everything else."""
+    sig_norm = sig.lower().replace('\\\\', '\\')
+    # Short single-word tokens (≤8 chars, no spaces) require word boundaries
+    # to prevent "net" matching "network", "reg" matching "registry", etc.
+    if ' ' not in sig_norm and len(sig_norm) <= 8:
+        return bool(re.search(r'\b' + re.escape(sig_norm) + r'\b', text))
+    return sig_norm in text
+
+
 def parse_findings(tool_outputs, rules=None):
     safe_outputs = [o for o in tool_outputs if 'ANTHROPIC_API_KEY' not in o]
     text = ' '.join(safe_outputs).lower().replace('\\\\', '\\')
@@ -272,11 +294,18 @@ def parse_findings(tool_outputs, rules=None):
     reasons = []
 
     for technique_id, data in patterns.items():
-        matched = [s for s in data['signals'] if s.lower().replace('\\\\', '\\') in text]
+        matched = [s for s in data['signals'] if _signal_matches(s, text)]
         if not matched:
             continue
 
-        if len(matched) >= 2:
+        # Calibrated per-signal weights (from compute_weights.py) take priority
+        cal = _CAL_WEIGHTS.get(technique_id, {})
+        sig_weights = cal.get('signals', {})
+        if sig_weights:
+            # Each signal contributes proportionally to its discriminative power
+            raw = sum(sig_weights.get(s.lower(), 0.1) * 100 for s in matched)
+            weight = min(int(raw), cal.get('base_weight', data['weight']))
+        elif len(matched) >= 2:
             weight = data['weight']
         else:
             weight = data['weight'] // 2
@@ -556,15 +585,16 @@ Never list a technique without citing the raw evidence that supports it. No spec
                     'content': (
                         f"Windows image at {target_path}. Full forensic investigation.\n\n"
                         f"PASS 1 ALREADY CHECKED (do not repeat): {already_checked}\n\n"
-                        f"Pass 1 score: {pass1_score}  "
-                        f"Techniques flagged: {list(pass1_hits.keys())}\n\n"
-                        f"Pass 1 evidence:\n{collected}\n\n"
+                        f"Raw artifacts and strings collected during initial scan:\n"
+                        f"{collected}\n\n"
                         f"AREAS NOT YET INVESTIGATED — work through these systematically:\n"
                         f"{uncovered}\n\n"
                         f"Budget: {MAX_AGENT_TOOLS} tool calls. For every suspicious file "
                         f"found: collect md5sum + stat + strings + prefetch before moving on. "
                         f"Build the evidence record as you go. Final assessment must cite "
-                        f"exact paths, hashes, and timestamps for each confirmed technique."
+                        f"exact paths, hashes, and timestamps for each confirmed technique. "
+                        f"Do NOT speculate — every finding must be grounded in a directly "
+                        f"observed artifact from a tool call."
                     ),
                 }]
 
@@ -583,11 +613,7 @@ Never list a technique without citing the raw evidence that supports it. No spec
                         )
                     except Exception as api_err:
                         print(f"\n  ⚠️  Agentic pass unavailable: {api_err}")
-                        analysis_text = (
-                            f"[Agentic pass unavailable — deterministic result]\n"
-                            f"Score: {pass1_score}  "
-                            f"Techniques: {list(pass1_hits.keys())}"
-                        )
+                        analysis_text = "[Agentic pass unavailable — deterministic result only]"
                         break
 
                     if response.stop_reason == 'tool_use':
@@ -673,8 +699,7 @@ Never list a technique without citing the raw evidence that supports it. No spec
                             except Exception:
                                 analysis_text = (
                                     f"[{'Budget exhausted' if not stop_early else 'Early report'} "
-                                    f"— {tool_call_count} calls]\n"
-                                    f"Score: {pass1_score}"
+                                    f"— {tool_call_count} tool calls completed]"
                                 )
                             break
 

@@ -232,52 +232,59 @@ class ForensicRedAgent:
 
     def evolve(self, tid: str, caught_by: list):
         """
-        Red evolves using Claude when caught.
-        Generates disk-level evasion (string fragmentation, ADS, LOTL, etc.)
-        rather than Sysmon-level evasion.
+        Red evolves using Claude Haiku when caught.
+        Retries up to 3 times on transient API/parse failures.
         """
         import anthropic
+        import time
 
         sample = self._pick_artifact(tid)
         client = anthropic.Anthropic()
+        caught_str = ', '.join(str(c) for c in caught_by[:3]) if caught_by else 'unknown'
 
-        try:
-            resp = client.messages.create(
-                model='claude-haiku-4-5-20251001',
-                max_tokens=250,
-                messages=[{
-                    'role': 'user',
-                    'content': (
-                        f'You are a red teamer evading forensic disk analysis.\n'
-                        f'Technique: {tid}\n'
-                        f'Caught by patterns: {caught_by}\n'
-                        f'Original SIFT artifact:\n{sample}\n\n'
-                        f'Suggest ONE realistic disk-level evasion. Options:\n'
-                        f'  - String fragmentation or encoding (split "{caught_by[0] if caught_by else "mimikatz"}")\n'
-                        f'  - Alternate tool (different binary, same objective)\n'
-                        f'  - Alternate path/registry location\n'
-                        f'  - LOTL (living-off-the-land binary)\n'
-                        f'  - Timestamp manipulation / ADS\n\n'
-                        f'Respond in JSON only, no markdown:\n'
-                        f'{{"modified_artifact": "SIFT-format artifact string", '
-                        f'"evasion": "one-line explanation"}}'
-                    ),
-                }],
-            )
-            raw   = resp.content[0].text.strip()
-            start = raw.find('{')
-            end   = raw.rfind('}') + 1
-            if start == -1 or end <= start:
-                raise ValueError(f'no JSON in: {raw[:80]!r}')
-            sug = json.loads(raw[start:end])
-            if tid not in self.evasions:
-                self.evasions[tid] = []
-            self.evasions[tid].append(sug)
-            print(f'   🔴 Evolved [{tid}]: {sug["evasion"][:70]}')
-            return sug
-        except Exception as e:
-            print(f'   ⚠️  Red evolve failed: {e}')
-            return None
+        prompt = (
+            f'You are a red teamer evading forensic disk analysis.\n'
+            f'Technique: {tid}\n'
+            f'Caught by these disk artifact patterns: {caught_str}\n'
+            f'Original SIFT artifact:\n{sample}\n\n'
+            f'Suggest ONE realistic evasion for disk forensics. Choose one:\n'
+            f'  - Rename/move the tool to a benign-looking path\n'
+            f'  - Use an alternate LOTL binary with the same objective\n'
+            f'  - Fragment or encode the identifying string\n'
+            f'  - Use an ADS or alternate data stream\n'
+            f'  - Modify timestamps to blend with OS files\n\n'
+            f'Respond with ONLY a JSON object, no markdown fences:\n'
+            f'{{"modified_artifact": "<SIFT-format artifact line>", '
+            f'"evasion": "<one-line explanation of the technique>"}}'
+        )
+
+        last_err = None
+        for attempt in range(3):
+            try:
+                resp = client.messages.create(
+                    model='claude-haiku-4-5-20251001',
+                    max_tokens=300,
+                    messages=[{'role': 'user', 'content': prompt}],
+                )
+                raw   = resp.content[0].text.strip()
+                start = raw.find('{')
+                end   = raw.rfind('}') + 1
+                if start == -1 or end <= start:
+                    raise ValueError(f'no JSON object found in response: {raw[:120]!r}')
+                sug = json.loads(raw[start:end])
+                if 'modified_artifact' not in sug or 'evasion' not in sug:
+                    raise ValueError(f'missing required keys in: {sug}')
+                if tid not in self.evasions:
+                    self.evasions[tid] = []
+                self.evasions[tid].append(sug)
+                print(f'   🔴 Evolved [{tid}]: {sug["evasion"][:70]}')
+                return sug
+            except Exception as e:
+                last_err = e
+                if attempt < 2:
+                    time.sleep(1.5 * (attempt + 1))
+        print(f'   ⚠️  Red evolve failed after 3 attempts: {last_err}')
+        return None
 
     def cleanup(self, tid: str):
         pass  # no external state to clean up

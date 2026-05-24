@@ -36,6 +36,11 @@ reports/forensic_brain_state.json
 # Forensic training datasets (download via forensic_data_agent.py)
 datasets/forensic/
 
+# Corpus samples (SHA256s + HA metadata) — rebuilt by build_corpus.py
+data/corpus/
+# calibrated_weights.json is a build artifact; uncomment to version-control it
+# data/calibrated_weights.json
+
 # Case-specific investigation output (contains victim/suspect data)
 reports/*-investigation.json
 reports/*-report.html
