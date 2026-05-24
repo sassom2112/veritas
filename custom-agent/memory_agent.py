@@ -424,3 +424,17 @@ async def investigate(memory_path: str, host: str,
         tool_outputs, analysis_text, pass_info,
     )
     return final_score, final_hits
+
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(
+        description='Memory Triage Agent — Volatility 3 two-pass analysis'
+    )
+    parser.add_argument('memory_path', help='Path to raw memory image')
+    parser.add_argument('--host', required=True,
+                        help='Host label used for report filenames (e.g. nfury)')
+    parser.add_argument('--no-synthesis', action='store_true',
+                        help='Skip Pass 2 agentic loop (Pass 1 only)')
+    args = parser.parse_args()
+    asyncio.run(investigate(args.memory_path, args.host, args.no_synthesis))
