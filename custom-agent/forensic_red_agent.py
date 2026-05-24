@@ -10,6 +10,7 @@ Seed dataset (~10 examples per technique) lets training start immediately withou
 any API key.  Run forensic_data_agent.py --fetch --all to enrich with Hybrid Analysis
 sandbox data and increase training coverage.
 """
+from __future__ import annotations
 
 import json
 import os

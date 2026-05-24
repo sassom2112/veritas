@@ -12,6 +12,7 @@ Usage:
     python3 custom-agent/forensic_brain.py --iterations 200 # quick test
     python3 custom-agent/forensic_brain.py --export-only    # export without training
 """
+from __future__ import annotations
 
 import argparse
 import json

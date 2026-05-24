@@ -14,6 +14,7 @@ Usage:
     python3 custom-agent/forensic_data_agent.py --fetch --all
     python3 custom-agent/forensic_data_agent.py --fetch --all --max-samples 10
 """
+from __future__ import annotations
 
 import argparse
 import json

@@ -23,7 +23,7 @@ _DEFAULT_STATE = os.path.join(_REPORTS, 'brain_state.json')
 _DEFAULT_OUTPUT = os.path.join(_REPORTS, 'operational_rules.json')
 
 
-def _load_domain_rules(state_path: str, domain: str, min_weight: int) -> tuple[dict, int]:
+def _load_domain_rules(state_path, domain, min_weight):
     """Read brain state and return (rules_dict, iteration)."""
     if not os.path.exists(state_path):
         return {}, 0
