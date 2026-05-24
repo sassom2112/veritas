@@ -29,10 +29,10 @@ python3 custom-agent/investigate.py /mnt/hostname
 | False positives caught by Auditor | 2 |
 | Confirmed findings verified on disk | 100% |
 | MCP security layers | 4 |
-| ASL-trained operational rules | 11 |
-| MITRE ATT&CK techniques covered | 9 |
-| Training iterations | 3,000 |
-| Real Sysmon events trained on | 49,519 |
+| MITRE techniques covered by corpus weights | 9 |
+| Malware samples in corpus | 800+ |
+| Auditor challenge rounds per technique | 5 |
+| Investigation cost | ~$14 / 17 min |
 
 ---
 
@@ -46,23 +46,28 @@ ADVERSA makes hallucinating a confirmed finding **structurally impossible**. A f
 
 ## Three-phase pipeline
 
-**Phase 1 — Triage Agent** (The Optimist)
-~25 deterministic SIFT commands, no LLM, scores against 11 ASL-trained rules.
+**Phase 1 — Triage Agent**
+~25 deterministic SIFT commands, no LLM, scores against corpus-calibrated log-odds weights (9 MITRE techniques, 800+ labeled malware samples).
 
 **Phase 2 — Agentic deep investigation**
-75-call Claude loop targeting uncovered domains: event logs, prefetch, SAM hive, WER dumps, network artifacts.
+75-call Claude loop targeting uncovered domains: event logs, prefetch, SAM hive, WER dumps, network artifacts. Runs blind — no Pass 1 score, no technique labels passed in.
 
-**Phase 3 — Forensic Auditor** (The Cynic)
-Independent parallel re-verification of every finding. CONFIRMED requires a physical artifact on disk. Budget exhaustion without positive evidence → INCONCLUSIVE.
+**Phase 3 — Forensic Auditor**
+Independent parallel re-verification of every finding. Up to 5 challenge rounds per technique. CONFIRMED requires a physical artifact on disk. Budget exhaustion without positive evidence → INCONCLUSIVE.
 
 ---
 
 ## Live results (SANS FIND EVIL! 2026 case data)
 
-| Host | Confirmed | Inconclusive | Refuted | Score | Verdict |
-|------|-----------|-------------|---------|-------|---------|
-| tdungan | T1003.001, T1204.002, T1059 | T1071.001 | — | 100 | HIGH |
-| nfury | T1003.001, T1087.001 | — | — | 95 | HIGH |
-| controller | T1003.001 | — | T1036.005, T1087.001 | 50 | HIGH |
+**nfury** — full pipeline (disk + memory, corpus-calibrated weights, current auditor):
 
-The controller is the strongest demonstration: triage score 145, two techniques refuted by the Auditor on physical evidence, final score 50 with one confirmed finding.
+| Phase | Score | Detail |
+|------|-------|--------|
+| Triage | 100/100 | 9 techniques detected |
+| Auditor adjusted | 70/100 | 2 confirmed, 7 refuted |
+| Verdict | HIGH | Active compromise confirmed |
+
+Confirmed: **T1003.002** (SAM credential dump), **T1055** (process injection via a.exe loader).
+Attack chain: httppump C2 at 199.73.28.114/ads/, attacker account `vibranium`, exfil via system4.rar.
+
+**controller, tdungan** — investigated with an earlier pipeline version (pre-corpus weights). Results in [SUBMISSION.md](submission). Not directly comparable to current system output.

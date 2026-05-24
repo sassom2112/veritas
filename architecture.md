@@ -46,21 +46,21 @@ graph TD
         end
         subgraph AGENT_2["Phase 2 — Forensic Auditor  (auditor_agent.py)"]
             PAR["asyncio.gather\nIsolated MCP session per technique"]
-            RND["3 rounds x 2 tools each\nCONFIRMED / REFUTED / INCONCLUSIVE"]
+            RND["5 rounds x 2 tools each\nCONFIRMED / REFUTED / INCONCLUSIVE"]
             ADJ["Adjusted Score\n= sum of confirmed technique weights"]
             PAR --> RND --> ADJ
         end
         AGENT_1 -->|Triage Findings Report| AGENT_2
     end
     ORCH --> AGENT_1
-    API(["Anthropic API\nclaude-opus-4-5"])
+    API(["Anthropic API\nclaude-sonnet-4-6"])
     P2 <-->|tool_use loop| API
     RND <-->|tool_use loop| API
     subgraph L3["🛡️ LAYER 3: MCP Security Boundary  (sift_server.py)  ← ARCHITECTURAL ENFORCEMENT"]
         direction TB
         RTC["run_terminal_command\nCore Execution Primitive"]
         UTL["run_volatility\nsearch_ioc\ncompute_file_hash"]
-        GATE{"Validator Gate\n1. Hard-blocked strings\n2. Binary allowlist · 50+ tools\n3. Quote-aware pipe split\n4. Redirect guard → reports/ only"}
+        GATE{"Validator Gate\n1. Hard-blocked strings · 22 tokens\n2. Binary allowlist · 53 tools\n3. Quote-aware pipe split\n4. Redirect guard → reports/ only"}
         RTC --> GATE
         UTL --> GATE
     end
@@ -120,7 +120,7 @@ graph TD
 | Operator instructions (CLAUDE.md) | **Prompt-based** | Model can ignore; MCP layer is the real backstop |
 | Agent system prompts | **Prompt-based** | Model can ignore; Auditor independence enforced by separate session |
 | MCP Validator Gate (Layer 3) | **Architectural** | Code-enforced in Python before `subprocess.run()`; model cannot override |
-| Binary allowlist | **Architectural** | ~50 approved SIFT tools; any other binary rejected at the gate |
+| Binary allowlist | **Architectural** | 53 approved SIFT tools; any other binary rejected at the gate |
 | Redirect guard | **Architectural** | `os.path.realpath()` checked; no writes outside `reports/` |
 | Auditor independence | **Architectural** | Separate `asyncio` task, separate MCP session, no shared state with Triage Agent |
 

@@ -6,7 +6,13 @@ permalink: /accuracy
 
 # Accuracy & Evidence Integrity
 
-## Final Training Metrics (3,000 Iterations)
+> **Scope note:** The training metrics below cover the **Sysmon ASL component** (`brain.py`) —
+> the adversarial Red/Blue loop trained on 49,519 real Windows Sysmon events from the OTRF Mordor
+> datasets. This is one signal source in the pipeline. The other is corpus-calibrated log-odds
+> weights derived from 800+ malware samples (`data/calibrated_weights.json`).
+> Investigation-level results are on the [main page](/).
+
+## Sysmon ASL Training Metrics (3,000 Iterations)
 
 | Metric | Value |
 |--------|-------|
@@ -98,11 +104,11 @@ Every shell command executed by the Blue Agent passes through a four-stage valid
 This is **architectural enforcement**, not prompt-based — the model cannot override it:
 
 1. **Hard-blocked substrings** — `shred`, `mkfs`, `dd if=/dev/zero`, `wget`, `curl`,
-   `nc`, `ssh`, `scp`, `sudo`, `kill`, `$(`, backtick and 11 others are blocked
+   `nc`, `ssh`, `scp`, `sudo`, `kill`, `$(`, backtick — 22 tokens total, blocked
    unconditionally, regardless of context.
 
 2. **Binary allowlist** — Each pipeline segment (split on `|`) must start with a
-   binary from a hardcoded frozenset of forensic tools (~50 entries: `grep`, `fls`,
+   binary from a hardcoded frozenset of forensic tools (53 entries: `grep`, `fls`,
    `vol.py`, `rip.pl`, `strings`, `md5sum`, `xxd`, etc.). Unlisted binaries (`rm`,
    `chmod`, `xargs`, etc.) are rejected.
 

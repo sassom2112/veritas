@@ -119,7 +119,7 @@ Requires a Windows disk image mounted read-only at a path like `/mnt/hostname`.
 python3 fast-triage/fast_triage.py /mnt/hostname
 ```
 
-Deterministic IOC sweep using pre-trained ASL rules. Prints score and matched signals. Auto-escalates to full pipeline if score ≥ 30.
+Deterministic IOC sweep using corpus-calibrated signal weights. Prints score and matched signals. Auto-escalates to full pipeline if score ≥ 30.
 
 ---
 
@@ -145,15 +145,17 @@ python3 custom-agent/investigate.py /mnt/host3   # host1 + host2 IOCs
 
 ---
 
-## Path C — Retrain ASL on new evidence
+## Path C — Rebuild signal weights
 
 ```bash
+# Recalibrate corpus weights from MalwareBazaar + HybridAnalysis
+MB_API_KEY=your_key HA_API_KEY=your_key python3 custom-agent/build_corpus.py --limit 100
+python3 custom-agent/compute_weights.py       # → data/calibrated_weights.json
+
+# Retrain Sysmon ASL (requires Mordor datasets — see DATASET.md)
 python3 custom-agent/brain.py                 # ~30 min, 3000 iterations
 python3 custom-agent/export_patterns.py       # → operational_rules.json
-python3 custom-agent/sigma_exporter.py        # → reports/sigma_rules/*.yml
 ```
-
-Download Mordor datasets first: [DATASET](dataset)
 
 ---
 
@@ -164,5 +166,5 @@ Download Mordor datasets first: [DATASET](dataset)
 | `reports/hostname-report.html` | Full investigation report — exec summary, IOC table, Auditor transcript |
 | `reports/hostname-investigation.json` | Confirmed / inconclusive / refuted techniques, adjusted score |
 | `reports/hostname-auditor-transcript.json` | Every Auditor challenge, round-by-round, with tool output and reasoning |
-| `reports/operational_rules.json` | Pre-trained ASL rules — ship with the repo, no training required to use |
+| `reports/operational_rules.json` | Sysmon ASL operational rules — ships with the repo, no training required to use |
 | `reports/sigma_rules/*.yml` | Sigma detection rules, adversarially validated |
