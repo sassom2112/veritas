@@ -405,7 +405,14 @@ Examples:
                         help='Raw memory image path (explicit mode only).')
     parser.add_argument('--no-synthesis', action='store_true',
                         help='Alias for --triage.')
+    parser.add_argument('--model', metavar='MODEL_ID',
+                        default=os.environ.get('ADVERSA_MODEL', 'claude-sonnet-4-6'),
+                        help='Claude model for agentic loops '
+                             '(default: claude-sonnet-4-6). '
+                             'Use claude-opus-4-7 for maximum capability.')
     args = parser.parse_args()
+    os.environ['ADVERSA_MODEL'] = args.model
+    print(f"  Model: {args.model}")
 
     # Resolve no-synthesis alias
     no_synthesis = args.triage or args.no_synthesis

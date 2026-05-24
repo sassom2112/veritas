@@ -362,7 +362,7 @@ async def investigate(memory_path: str, host: str,
 
                 while tool_call_count < MAX_AGENT_TOOLS:
                     response = client.messages.create(
-                        model='claude-opus-4-7',
+                        model=os.environ.get('ADVERSA_MODEL', 'claude-sonnet-4-6'),
                         max_tokens=4096,
                         system=_AGENT_SYSTEM,
                         tools=tools,
@@ -415,7 +415,7 @@ async def investigate(memory_path: str, host: str,
                 if not analysis_text:
                     print(f"  [M2] Budget exhausted — requesting synthesis...")
                     synth = client.messages.create(
-                        model='claude-opus-4-7',
+                        model=os.environ.get('ADVERSA_MODEL', 'claude-sonnet-4-6'),
                         max_tokens=1024,
                         system=_AGENT_SYSTEM,
                         messages=messages + [{
