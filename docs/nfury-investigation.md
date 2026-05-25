@@ -6,8 +6,8 @@ permalink: /nfury
 
 # nfury — Live Investigation Report
 
-APT1-era intrusion. httppump C2 at `199.73.28.114/ads/`. Attacker account `vibranium`.
-Full disk + memory pipeline. 17 minutes. $14.
+APT1-era intrusion. httppump C2 at `192.168.1.5/ads/`. Attacker account `vibranium`.
+Full disk + memory pipeline. 15 confirmed, 4 refuted. 16 minutes. $14.
 
 [Open full screen](/docs/nfury-report.html){: .btn .btn-primary .mb-4 }
 

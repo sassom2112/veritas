@@ -25,14 +25,14 @@ python3 custom-agent/investigate.py /mnt/hostname
 
 | Stat | Value |
 |------|-------|
-| Techniques confirmed on nfury (current pipeline) | 15 of 19 detected |
-| Techniques refuted by Auditor | 4 |
+| APT hosts investigated (current pipeline) | 2 |
+| Techniques confirmed across both hosts | 28 of 36 detected |
+| Techniques refuted by Auditor | 8 |
 | Confirmed findings with physical artifact citation | 100% |
 | MCP security layers | 4 |
 | MITRE techniques covered by corpus weights | 9 |
 | Malware samples in corpus | 800+ |
-| Auditor challenge rounds per technique | up to 5 |
-| Investigation cost | ~$14 / 16 min |
+| Investigation cost | ~$14 / ~15 min per host |
 
 ---
 
@@ -75,4 +75,21 @@ Refuted (4): T1071.001, T1134, T1547.001, T1574 — memory signals without disk 
 Key artifacts: httppump backdoor (`svchost.exe` in `$Recycle.Bin`, timestomped to 2008-04-14, C2 at `192.168.1.5/ads/`), `a.exe` injector (127 `PAGE_EXECUTE_READWRITE` VADs via Volatility malfind), `SRL-Helpdesk` account creation (Event ID 4720), `psexesvc.exe` on disk, `system4.rar` + `chrome.7z` exfil staging.
 Attacker account: `vibranium` (SID S-1-5-21-2036804247-3058324640-2116585241-1673).
 
-Additional hosts (controller, tdungan, nromanoff) pending re-run with current pipeline.
+---
+
+**tdungan** — full pipeline with nfury IOCs injected (campaign mode):
+
+| Phase | Score | Detail |
+|------|-------|--------|
+| Triage (disk + memory) | 100/100 | 17 techniques detected |
+| Auditor adjusted | 100/100 | 13 confirmed, 4 refuted |
+| Verdict | HIGH | Active compromise confirmed |
+
+Confirmed (13): T1003.002, T1005, T1021, T1041, T1055, T1059, T1071, T1074, T1082, T1136, T1140, T1547, **T1566** (Phishing — initial access).
+Refuted (4): T1134, T1547.001, T1569.002, T1574 — memory signals without disk corroboration.
+
+Key artifacts: `svchost.exe` masquerade at wrong path (`dllhost\svchost.exe`, spawned from `explorer.exe`), same C2 `192.168.1.5/ads/` — different binary variant (SHA-256: `91f16fc5...`). `HYDRAKATZ.EXE` in Prefetch — purpose-built credential harvester (Hydra + Mimikatz). `PKXEZY1TJI98.EXE` dropper. `SRL-Helpdesk` NTLM hash `4c3f5e9f...` — **matches nfury**, confirming credential reuse across hosts.
+
+**Cross-host campaign correlation:** Same C2 infrastructure, same `SRL-Helpdesk` account hash, `a.exe` IOC from nfury present on tdungan. T1566 on tdungan identifies phishing as the initial access vector for the campaign.
+
+Additional hosts (controller, nromanoff) pending re-run with current pipeline.

@@ -131,6 +131,28 @@ Total runtime: 16 minutes. Total cost: $14.
 
 ---
 
+**tdungan — second host, campaign mode, cross-host correlation confirmed.**
+
+Run with nfury IOCs injected: `python3 custom-agent/investigate.py --case ~/cases/tdungan nfury`
+
+17 techniques detected. Auditor: **13 confirmed, 4 refuted**. Adjusted score: 100/100. ~15 minutes.
+
+Confirmed attack chain:
+
+- **T1566** — Phishing confirmed as initial access vector. First time this appeared in the campaign — tdungan identifies the entry point.
+- **T1003.002** — Volatility `hashdump` extracted Administrator (NT: `8846f7ee...`), SRL-Helpdesk (NT: `4c3f5e9f...`) from live memory. `SRL-Helpdesk` NTLM hash **matches nfury exactly** — attacker-created account credential confirmed across both hosts.
+- **T1055** — `svchost.exe` at wrong path (`C:\windows\system32\dllhost\svchost.exe`, spawned from `explorer.exe` not `services.exe`) — injected with 5+ anonymous RWX VadS regions with committed MZ headers (reflective DLL load). Same C2: `http://192.168.1.5/ads/` — **different binary variant** (SHA-256: `91f16fc5...` vs nfury's `f293fdb9...`). Same campaign, evolved tooling.
+- **T1003** — `HYDRAKATZ.EXE` in Prefetch — purpose-built credential harvester; name combines Hydra (brute-forcer) and Mimikatz (credential dumper). Custom attacker tooling.
+- **T1566 + T1005 + T1074 + T1041** — Phishing → data collection → staging → exfiltration chain confirmed end-to-end.
+- **T1021** — Lateral movement via remote services confirmed.
+- **T1059, T1071, T1082, T1136, T1140, T1547** — scripting, C2 protocol, discovery, account creation, decode, persistence all confirmed on disk.
+
+Refuted (4): T1134, T1547.001, T1569.002, T1574 — memory-only signals, no disk corroboration. Same pattern as nfury — the Auditor consistently distinguishes memory keywords from physical artifacts.
+
+**IOC propagation worked.** `a.exe` and `SRL-Helpdesk` from the nfury IOC file were recognized as known attacker tools on tdungan. This is the campaign mode doing its job.
+
+---
+
 ## What We Learned
 
 **Architectural separation is the only reliable anti-hallucination mechanism.** Prompt instructions telling the model to be skeptical produce a skeptical-sounding model. A second agent with its own MCP session that physically cannot confirm a finding without a positive tool return value produces a verified finding. These are not equivalent.
@@ -139,7 +161,7 @@ Total runtime: 16 minutes. Total cost: $14.
 
 **Generic signals and case IOCs are fundamentally different things.** A signal that fires on `psexesvc` in a malware corpus generalizes. A signal that fires on `199.73.28.114` is a case-specific IOC. Baking IOCs into the detection layer inflates scores on familiar images without generalizing to new ones. ADVERSA separates these explicitly — corpus weights are generic, IOC files are opt-in at runtime.
 
-**One confirmed case is more defensible than ten unverified ones.** The full-pipeline system — corpus-calibrated weights, decoupled passes, fixed auditor — was validated on nfury. That is the one data point we stand behind completely.
+**Two validated hosts, consistent auditor behavior.** nfury: 15/19 confirmed, 4 refuted. tdungan: 13/17 confirmed, 4 refuted. Both runs showed the same pattern — memory-only signals refuted, disk-corroborated findings confirmed. The auditor is not case-specific; it applies the same physical verification standard regardless of host.
 
 ---
 

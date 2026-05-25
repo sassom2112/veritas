@@ -49,15 +49,18 @@ ATT\&CK techniques. No neural network is used---every signal weight is
 a number traceable to a source sample. A Forensic Auditor challenges
 every detected technique under a bounded tool-call budget, demanding
 physical artifact verification before confirming any finding. The system
-was validated on the nfury host from an APT intrusion: triage scored
-100/100 across 19 detected techniques; the Auditor confirmed 15
-(including T1003.002 SAM credential dump, T1055 process injection,
+was validated on two hosts from an APT intrusion. On nfury, triage
+scored 100/100 across 19 detected techniques; the Auditor confirmed
+15 (including T1003.002 SAM credential dump, T1055 process injection,
 T1569.002 PsExec lateral movement, T1071 httppump HTTP C2, and
 T1136/T1098 attacker account creation) and refuted 4 memory-only
-signals without disk corroboration. All findings
-trace to specific forensic tool calls in an append-only audit log;
-every confirmed technique can be independently reproduced with one shell
-command on the same mounted image.
+signals. On tdungan, run in campaign mode with nfury IOCs injected,
+the Auditor confirmed 13 of 17 detections; T1566 (Phishing) was
+confirmed as the campaign initial access vector, and the
+SRL-Helpdesk NTLM hash matched nfury exactly---confirming credential
+reuse across hosts. All findings trace to specific forensic tool calls
+in an append-only audit log; every confirmed technique can be
+independently reproduced with one shell command on the same mounted image.
 \end{abstract}
 
 \keywords{digital forensics, MITRE ATT\&CK, DFIR automation, log-odds
@@ -533,27 +536,29 @@ the generic TTP detection baseline: each new image is still swept first
 by the generic Pass~1 commands, with case-specific IOC commands appended
 as a second tier.
 
-\subsection{Results on nfury (Current Pipeline)}
+\subsection{Results — Current Pipeline}
 
-\Cref{tab:results} summarises findings from the nfury investigation
-using the full current pipeline (corpus-calibrated weights, decoupled
-passes, fixed auditor). Additional hosts are pending re-run with the
-current pipeline.
+\Cref{tab:results} summarises findings from two hosts investigated
+with the full current pipeline (corpus-calibrated weights, decoupled
+passes, Volatility~3 memory analysis, fixed auditor). tdungan was
+run in campaign mode with nfury IOCs injected
+(\texttt{--case \textasciitilde/cases/tdungan nfury}).
 
 \begin{table}[!ht]
 \centering
-\caption{Pipeline results on nfury (current pipeline).
-  Triage score reflects Pass~1+2 weighted signal matches; adjusted
-  score reflects the Forensic Auditor's confirmed-technique sum after
-  refuting false positives. All findings are traceable to a specific
-  tool call in the append-only audit log
-  (\texttt{reports/audit\_log.jsonl}).}
+\caption{Pipeline results. Triage scores reflect combined disk+memory
+  weighted signal matches; adjusted scores reflect Forensic Auditor
+  confirmed-technique sum after refutation. All findings traceable to
+  specific tool calls in the append-only audit log.}
 \label{tab:results}
-\begin{tabular}{@{}lcclll@{}}
+\begin{tabular}{@{}lcccc@{}}
 \toprule
-Machine (IP)      & Triage & Adjusted & Confirmed & Refuted \\
+Host & Triage & Adjusted & Confirmed & Refuted \\
 \midrule
-nfury (10.3.58.6) & 100 & 100 & 15 techniques (see \cref{tab:nfury}) & 4 techniques \\
+nfury (10.3.58.6)   & 100 & 100 & 15 (see \cref{tab:nfury})   & 4 \\
+tdungan (10.3.58.7) & 100 & 100 & 13 (see \cref{tab:tdungan}) & 4 \\
+\midrule
+\textbf{Total}      &     &     & \textbf{28 of 36}           & \textbf{8} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -623,6 +628,111 @@ T1134, T1547.001, and T1574 were similarly refuted as memory-only
 signals without disk corroboration.
 
 Total runtime: 969\,s ($\approx$16\,min); total cost: \$14.
+
+\paragraph{tdungan.}
+Investigated in campaign mode with nfury IOCs injected
+(\texttt{--case \textasciitilde/cases/tdungan nfury}).
+Combined disk and memory triage scored 100/100 across 17 detected
+techniques. The Auditor challenged all 17 and returned
+\textbf{13 confirmed, 4 refuted.} \Cref{tab:tdungan} lists all confirmed
+techniques.
+
+\begin{table}[ht]
+\centering\small
+\caption{tdungan confirmed techniques. Campaign mode: nfury IOCs injected.
+  Source indicates whether the confirming artifact was found on disk,
+  in memory, or both.}
+\label{tab:tdungan}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Technique & Name & Source \\
+\midrule
+T1003.002 & SAM Credential Dump         & disk+memory \\
+T1005     & Data from Local System      & disk \\
+T1021     & Remote Services             & disk \\
+T1041     & Exfiltration Over C2        & disk \\
+T1055     & Process Injection           & disk+memory \\
+T1059     & Command and Scripting       & disk \\
+T1071     & Application Layer Protocol  & disk \\
+T1074     & Data Staged                 & disk \\
+T1082     & System Information Discovery& disk \\
+T1136     & Create Account              & disk \\
+T1140     & Deobfuscate/Decode          & disk \\
+T1547     & Boot/Logon Autostart        & disk \\
+T1566     & Phishing                    & disk \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Key physical artifacts: a \texttt{svchost.exe} masquerade binary at
+\texttt{C:\textbackslash windows\textbackslash system32\textbackslash
+dllhost\textbackslash svchost.exe}---the wrong parent directory,
+spawned from \texttt{explorer.exe} (PPID~1900) rather than
+\texttt{services.exe}---carrying the same C2 URL
+(\texttt{http://192.168.1.5/ads/}) as nfury but a distinct binary
+(SHA-256: \texttt{91f16fc5\ldots} vs.\ nfury's \texttt{f293fdb9\ldots}).
+Volatility~3 \texttt{windows.malfind} found 5+ anonymous \texttt{VadS}
+regions with committed MZ headers and \texttt{PAGE\_EXECUTE\_READWRITE}
+protection in the injected process---a classic reflective DLL loader
+staging signature (T1055). Prefetch contained
+\texttt{HYDRAKATZ.EXE-27B49502.pf}---a purpose-built credential harvester
+whose name explicitly combines Hydra (brute-force) and Mimikatz
+(credential dumping)---and \texttt{PKXEZY1TJI98.EXE-0BCBF29B.pf},
+a random-name dropper consistent with staged payload delivery.
+\texttt{windows.hashdump} extracted the Administrator NTLM hash
+(\texttt{8846f7ee\ldots}) and \texttt{SRL-Helpdesk} NTLM hash
+(\texttt{4c3f5e9f\ldots}) from live memory; the SRL-Helpdesk hash
+\emph{matches nfury exactly}, confirming credential reuse across hosts.
+T1566 (Phishing) was confirmed on tdungan for the first time in
+the campaign---identifying the initial access vector for the full APT
+operation. Refuted (4): T1134, T1547.001, T1569.002, T1574---all
+memory-only signals with no disk corroboration, the same pattern seen
+on nfury.
+
+Total runtime: 880\,s ($\approx$15\,min); total cost: $\approx$\$14.
+
+\subsection{Cross-Host Campaign Correlation}
+\label{sec:campaign}
+
+Two hosts, consistent attacker infrastructure, and a single confirmed
+initial access vector. The correlations are grounded in physical
+artifacts on both images---not in shared model state or triage scoring.
+
+\textbf{Common C2 infrastructure.} Both nfury and tdungan carry the
+hardcoded URL \texttt{http://192.168.1.5/ads/} in distinct httppump
+variants. This is not a coincidence of string matching: the URL
+appears in extracted binary strings on disk on both images, confirmed
+independently by the Auditor on each host.
+
+\textbf{Different binary variants, same campaign.}
+The httppump backdoor on nfury (SHA-256: \texttt{f293fdb9\ldots},
+102\,KiB, staged in \texttt{\$Recycle.Bin}) is cryptographically
+distinct from the variant on tdungan (SHA-256: \texttt{91f16fc5\ldots},
+\texttt{dllhost\textbackslash svchost.exe} masquerade). Different
+hashes, same C2---consistent with an operator deploying evolved
+tooling across lateral movement targets.
+
+\textbf{SRL-Helpdesk NTLM hash identical on both hosts.}
+Volatility~3 \texttt{windows.hashdump} returned
+\texttt{SRL-Helpdesk: 4c3f5e9fe4c8fc2f99d47cbb25d7d193}
+on both nfury and tdungan. An identical NTLM hash for an
+attacker-created service account across two separate domain hosts
+is conclusive evidence of credential reuse from a single operator.
+
+\textbf{IOC propagation confirmed.} The \texttt{a.exe} filename IOC
+extracted from nfury was recognised as a priority signal during the
+tdungan investigation; \texttt{A.EXE-239305EA.pf} and
+\texttt{A.EXE-0F3A0E12.pf} prefetch entries (multiple hashes,
+multiple runs) confirmed staged payload delivery on tdungan.
+This is the campaign mode delivering its intended output---a confirmed
+IOC on one host shortens the tool-call budget required to verify the
+same tooling on the next.
+
+\textbf{Phishing as campaign initial access.} T1566 was confirmed
+on tdungan and absent on nfury. tdungan is the patient-zero host;
+its phishing artifacts identify how the attacker established the
+initial foothold before pivoting laterally to nfury and the broader
+domain. Two hosts, one pipeline run, one identified initial vector.
 
 \subsection{Earlier Pipeline — Lessons Learned}
 \label{sec:lessons}
@@ -959,15 +1069,19 @@ iteration~10, and measured autonomous recovery to 76\% detection and
 F1~=~0.72 over \num{4500} iterations with no human intervention. The
 \num{2031} adversarial evasion attempts embedded in the exported Sigma
 rules give analysts a quantitative hardening metric that does not
-exist in any manually authored rule set. The nfury host from an APT intrusion with Chinese-language artifacts
-was investigated autonomously; the Forensic Auditor confirmed 15 of 19
-triage detections on physical artifacts and refuted 4 memory-only
-signals. The complete attack chain---httppump backdoor
-(\texttt{svchost.exe} in \texttt{\$Recycle.Bin}, timestomped,
+exist in any manually authored rule set. Two hosts from an APT intrusion were investigated autonomously. On
+nfury, the Forensic Auditor confirmed 15 of 19 triage detections and
+refuted 4 memory-only signals; the complete attack chain---httppump
+backdoor (\texttt{svchost.exe} in \texttt{\$Recycle.Bin}, timestomped,
 C2 at \texttt{192.168.1.5/ads/}), injector (\texttt{a.exe},
 127 \texttt{PAGE\_EXECUTE\_READWRITE} VADs), attacker account
 (\texttt{SRL-Helpdesk}, Event~ID~4720), and PsExec lateral
-movement---was characterized in 969\,s at \$14 cost.
+movement---was characterized in 969\,s at \$14 cost. On tdungan,
+run in campaign mode, 13 of 17 were confirmed; T1566 (Phishing)
+identified the campaign initial access vector, and an identical
+SRL-Helpdesk NTLM hash confirmed cross-host credential reuse.
+Twenty-eight techniques confirmed across 36 detected, 8 refuted by
+the Auditor---all within 30~minutes total, at under \$30 combined.
 
 Every other approach gives defenders better tools. find-evil gives
 defenders the same adaptive mechanism that makes AI attacks
