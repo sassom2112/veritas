@@ -5,9 +5,16 @@ investigate.py -- Adversarial Investigation Orchestrator
 Sequences: Triage Agent (The Optimist) -> Forensic Auditor (The Cynic)
 Produces a unified report and argumentation transcript.
 
-Usage — simple (point at case directory, auto-discovers everything):
+Usage — case directory (auto-discovers disk mount + memory):
     python3 custom-agent/investigate.py --case /cases/nfury
-    python3 custom-agent/investigate.py --case /cases/nfury --triage   # fast, no AI loop
+    python3 custom-agent/investigate.py --case /cases/nfury --triage
+
+Campaign mode — explicitly name other hosts in the same investigation:
+    python3 custom-agent/investigate.py --case /cases/tdungan nfury
+    python3 custom-agent/investigate.py --case /cases/tdungan nfury nromanoff controller
+
+Each named host resolves to reports/<host>-iocs.json. No IOCs are injected
+unless you name them here — no automatic cross-campaign contamination.
 
 Usage — explicit paths (disk must already be mounted):
     python3 custom-agent/investigate.py /mnt/nfury
@@ -17,7 +24,6 @@ Usage — explicit paths (disk must already be mounted):
 
 import argparse
 import asyncio
-import glob
 import json
 import os
 import shlex
@@ -62,25 +68,38 @@ def _final_verdict(score: int, confirmed: list = None) -> str:
 
 # ── IOC auto-detection ─────────────────────────────────────────────────────
 
-def _autoload_campaign_iocs(target_path: str, reports_dir: str) -> dict | None:
+def _resolve_campaign_iocs(hosts_or_paths: list, reports_dir: str) -> dict | None:
     """
-    When --ioc-file is not passed, look for IOC files from other hosts in reports/.
-    Merges all found IOC files and returns the merged dict (or None if none found).
+    Resolve explicit campaign members to IOC data.
+
+    Each entry is either:
+      - a hostname ('nfury', 'controller')  -> reports/nfury-iocs.json
+      - a file path ('/path/to/host-iocs.json') -> used directly
+
+    No auto-detection. Only what you name gets injected.
     """
-    host = os.path.basename(target_path.rstrip('/'))
-    pattern = os.path.join(reports_dir, '*-iocs.json')
-    all_ioc_files = sorted(glob.glob(pattern))
-    # Exclude the current target's own IOC file (from a previous run)
-    other_iocs = [p for p in all_ioc_files
-                  if os.path.basename(p) != f'{host}-iocs.json']
-    if not other_iocs:
+    if not hosts_or_paths:
         return None
 
-    print(f"\n  ⚡ Auto-detected campaign IOC files ({len(other_iocs)}):")
-    for p in other_iocs:
+    resolved = []
+    for entry in hosts_or_paths:
+        if os.sep in entry or entry.endswith('.json'):
+            if not os.path.exists(entry):
+                print(f"ERROR: IOC file not found: {entry}")
+                sys.exit(1)
+            resolved.append(entry)
+        else:
+            path = os.path.join(reports_dir, f'{entry}-iocs.json')
+            if not os.path.exists(path):
+                print(f"ERROR: no IOC file for host '{entry}' — expected {path}")
+                sys.exit(1)
+            resolved.append(path)
+
+    print(f"\n  Campaign hosts ({len(resolved)}):")
+    for p in resolved:
         print(f"     {os.path.basename(p)}")
 
-    merged = merge_iocs(*other_iocs)
+    merged = merge_iocs(*resolved)
     n_ips   = len(merged.get('c2_ips', []))
     n_files = len(merged.get('filenames', []))
     n_accts = len(merged.get('accounts', []))
@@ -419,9 +438,11 @@ Examples:
     parser.add_argument('target', nargs='?',
                         help='Mounted disk image path (e.g. /mnt/nfury). '
                              'Not needed when using --case.')
-    parser.add_argument('ioc_files', nargs='*', metavar='IOC_FILE',
-                        help='IOC JSON files from prior investigations. '
-                             'Auto-detected from reports/ if omitted.')
+    parser.add_argument('campaign', nargs='*', metavar='HOST',
+                        help='Other hosts in this campaign whose IOCs should be '
+                             'injected (e.g. nfury nromanoff). Resolved to '
+                             'reports/<host>-iocs.json. Full paths also accepted. '
+                             'Nothing is injected if omitted.')
     parser.add_argument('--memory', metavar='MEMORY_PATH',
                         help='Raw memory image path (explicit mode only).')
     parser.add_argument('--no-synthesis', action='store_true',
@@ -461,7 +482,7 @@ Examples:
             print(f"\n  Memory score: {mem_result[0]}  techniques: {list(mem_result[1].keys())}")
             return
 
-        ioc_data = _autoload_campaign_iocs(disk_mount, _REPORTS)
+        ioc_data = _resolve_campaign_iocs(args.campaign, _REPORTS)
         os.environ['BLUE_TARGET'] = disk_mount
         asyncio.run(run_investigation(disk_mount, no_synthesis=no_synthesis,
                                       memory_path=memory_path, ioc_data=ioc_data))
@@ -480,17 +501,7 @@ Examples:
         print(f"ERROR: memory image not found: {args.memory}")
         sys.exit(1)
 
-    ioc_data = None
-    if args.ioc_files:
-        for p in args.ioc_files:
-            if not os.path.exists(p):
-                print(f"ERROR: IOC file not found: {p}")
-                sys.exit(1)
-        ioc_data = merge_iocs(*args.ioc_files)
-        n = sum(len(v) for v in ioc_data.values() if isinstance(v, list))
-        print(f"  IOC files: {args.ioc_files} ({n} IOCs merged)")
-    else:
-        ioc_data = _autoload_campaign_iocs(args.target, _REPORTS)
+    ioc_data = _resolve_campaign_iocs(args.campaign, _REPORTS)
 
     os.environ['BLUE_TARGET'] = args.target
     asyncio.run(run_investigation(args.target, no_synthesis=no_synthesis,
