@@ -74,6 +74,8 @@ _ALLOWED_BINARIES = frozenset({
     'xargs', 'tee',
     # ── Misc forensic utils ──
     'foremost', 'photorec',
+    # ── Hayabusa — 3700+ Sigma rules against Windows event logs ──
+    'hayabusa',
 })
 
 # ── Hard-blocked strings ─────────────────────────────────────────────────────
@@ -512,6 +514,67 @@ def compute_file_hash(file_path: str, algorithm: str = 'md5') -> dict:
         'hash': hval,
     })
     return {'file': file_path, 'algorithm': algorithm, 'hash': hval}
+
+
+@mcp.tool()
+def run_hayabusa(evtx_dir: str, output_format: str = 'summary') -> dict:
+    """
+    Run Hayabusa against a Windows event log directory with 3,700+ Sigma rules.
+
+    Parameters:
+      evtx_dir      — path to Windows/System32/winevt/Logs (or any dir with .evtx files)
+      output_format — 'summary' (default) | 'csv' | 'json'
+                      summary: rule-hit counts by severity and technique
+                      csv:     full timeline written to reports/{host}-hayabusa.csv
+                      json:    alerts written to reports/{host}-hayabusa.json
+
+    Returns rule-hit summary and path to output file (if csv/json).
+    Hayabusa is the authoritative EVTX analyzer — its Sigma rule hits are
+    forensically grounded signals, not string matches.
+    """
+    if not os.path.isdir(evtx_dir):
+        return {'error': f'EVTX directory not found: {evtx_dir}'}
+
+    host = os.path.basename(os.path.dirname(evtx_dir.rstrip('/')))
+    os.makedirs(_REPORTS, exist_ok=True)
+
+    if output_format == 'csv':
+        out_path = os.path.join(_REPORTS, f'{host}-hayabusa.csv')
+        cmd = f"hayabusa csv-timeline -d '{evtx_dir}' -o '{out_path}' --no-wizard -q 2>/dev/null"
+    elif output_format == 'json':
+        out_path = os.path.join(_REPORTS, f'{host}-hayabusa.json')
+        cmd = f"hayabusa json-timeline -d '{evtx_dir}' -o '{out_path}' --no-wizard -q 2>/dev/null"
+    else:
+        out_path = None
+        cmd = f"hayabusa logon-summary -d '{evtx_dir}' --no-wizard -q 2>/dev/null"
+
+    allowed, reason = _validate_command(cmd.split(' 2>/dev/null')[0])
+    if not allowed:
+        return {'error': f'Blocked: {reason}'}
+
+    output = _run(cmd, timeout=300)
+    lines  = [l for l in output.splitlines() if l.strip()]
+
+    _append_audit({
+        'timestamp':  datetime.now(timezone.utc).isoformat(),
+        'tool':       'run_hayabusa',
+        'evtx_dir':   evtx_dir,
+        'format':     output_format,
+        'line_count': len(lines),
+        'output_path': out_path,
+    })
+
+    result = {
+        'evtx_dir':    evtx_dir,
+        'format':      output_format,
+        'output_path': out_path,
+        'line_count':  len(lines),
+        'output':      '\n'.join(lines[:100]),
+        'truncated':   len(lines) > 100,
+    }
+    if out_path and os.path.exists(out_path):
+        result['file_size_kb'] = round(os.path.getsize(out_path) / 1024, 1)
+    return result
 
 
 if __name__ == "__main__":
