@@ -8,11 +8,11 @@ permalink: /story
 
 **SANS FIND EVIL! Hackathon 2026 | Persistent Learning Loop**
 
-**9** MITRE techniques covered &nbsp;·&nbsp;
+**15 of 19** MITRE techniques confirmed on nfury &nbsp;·&nbsp;
 **800+** labeled malware samples in corpus &nbsp;·&nbsp;
-**100%** of confirmed findings verified against disk artifacts &nbsp;·&nbsp;
+**100%** of confirmed findings with physical artifact citation &nbsp;·&nbsp;
 **4-layer** MCP security boundary &nbsp;·&nbsp;
-**17 minutes · $14** per full disk + memory investigation
+**16 minutes · $14** per full disk + memory investigation
 
 ---
 
@@ -85,7 +85,7 @@ Every command is atomically appended via `os.open + os.write` before `subprocess
 
 **The validator blocking legitimate forensic commands.** The first version split on `|` and checked each segment's leading binary. The first time the agent ran `grep -iE '(http|https|ftp)'`, the validator split on the `|` characters inside the single-quoted regex and rejected `https` as an unlisted binary. Fixing this required a quote-aware parser that tracks single-quoted substrings and treats `|` inside them as argument content, not a pipeline separator.
 
-**Over-broad security blocking.** `'service '` was hard-blocked to prevent service management commands. It also blocked every EvtxECmd invocation that queried EventID 7045 (service installs) — which is how PsExec leaves forensic traces. The block was narrowed to specific control verbs (`service start`, `service stop`, `service restart`, `service delete`). T1569.002 went from wrongly refuted to correctly challenged.
+**Over-broad security blocking.** `'service '` was hard-blocked to prevent service management commands. It also blocked every EvtxECmd invocation that queried EventID 7045 (service installs) — which is how PsExec leaves forensic traces. The block was narrowed to specific control verbs (`service start`, `service stop`, `service restart`, `service delete`). In the re-run, T1569.002 was **confirmed**: `psexesvc.exe` found on disk.
 
 **Case sensitivity on Linux NTFS mounts.** Windows XP stores hives at `WINDOWS/system32/config/`. Windows 7 uses `Windows/System32/config/`. On a Linux NTFS mount these are different paths. Every hardcoded path assumption silently fails. The fix was runtime path probing via `os.listdir()` wrapped in helper functions shared across the pipeline.
 
@@ -97,16 +97,35 @@ Every command is atomically appended via `os.open + os.write` before `subprocess
 
 ## Accomplishments
 
-**nfury — full pipeline confirmed an APT1 attack chain autonomously.**
+**nfury — full pipeline confirmed a complete APT1 attack chain autonomously. 15 of 19 techniques confirmed.**
 
-The image scored 100/100 on triage (disk and memory). The Auditor processed 9 flagged techniques across 25 argumentation rounds. Two survived:
+Pass 1 (deterministic sweep, no LLM) scored 20 on one technique. Pass 2 (agentic, 75 tool calls) surfaced 13 additional techniques and drove the score to 100. Memory analysis (Volatility 3, parallel) contributed 6 more. Combined triage: 100/100 across 19 detected techniques.
 
-- **T1003.002** — SAM credential dump confirmed via registry hive extraction
-- **T1055** — Process injection confirmed via memory analysis of the `a.exe` loader
+The Auditor challenged all 19 in parallel across 22 argumentation rounds. **15 confirmed. 4 refuted.**
 
-Seven were refuted. The attack chain: httppump C2 at `199.73.28.114/ads/`, attacker account `vibranium` (domain SID -1673), lateral movement via PsExec, exfiltration via `system4.rar`. Total runtime: 17 minutes. Total cost: $14.
+Confirmed attack chain, each finding grounded in a physical artifact citation:
 
-**The auditor refutation rate is the result, not a failure.** On nfury: 9 detected, 2 confirmed. An analyst who received 9 unverified technique flags would open 9 investigation threads. An analyst who receives 2 confirmed findings with physical artifact citations and 7 explicit refutals with reasoning opens 2. The Auditor's job is to narrow — and it did.
+- **T1036 / T1036.005** — `svchost.exe` in `$Recycle.Bin` under vibranium's SID, timestomped to 2008-04-14, no Microsoft PE strings — confirmed httppump backdoor (SHA-256: `f293fdb9...`)
+- **T1071** — `http://192.168.1.5/ads/` hardcoded C2 URL in binary; `HttpSendRequestA`, `HttpOpenRequestA`, `WININET.dll` imports confirmed on disk
+- **T1003.002** — Volatility `windows.hashdump` extracted Administrator (RID 500), Guest (RID 501), SRL-Helpdesk (RID 1001) hashes from live memory; SAM hive at `Windows/System32/config/SAM` confirmed on disk
+- **T1055** — `a.exe` (9KB, PDB: `httppump/inner/i.pdb`) at `vibranium/AppData/Local/Temp/` — `WriteProcessMemory`, `VirtualAlloc`, `CreateThread` imports confirmed; Volatility `malfind` returned 127 `PAGE_EXECUTE_READWRITE` VAD hits across `LogonUI.exe` and `FrameworkServi`
+- **T1136 / T1098** — `SRL-Helpdesk` account created 2012-03-13 UTC (Event ID 4720), enabled (4722), modified (4738) — attacker-created service account confirmed in event logs
+- **T1078** — `SHIELDBASE\rsydow` network logon from `10.3.58.4` (controller) via Event ID 4624, LogonType 3 — lateral movement credential confirmed
+- **T1547** — `System\CurrentControlSet\Services\netman\domain` registry key — httppump persistence mechanism confirmed
+- **T1569.002** — `psexesvc.exe` confirmed on disk. **PsExec lateral movement confirmed.** (This was wrongly refuted in the previous run due to the `service ` blocking bug — the fix was validated here.)
+- **T1560.001** — `system4.rar`, `chrome.7z` — exfiltration staging archives confirmed on disk
+- **T1005, T1105, T1140, T1564** — data collection, tool transfer, deobfuscation (httppump PDB path recovery), Recycle Bin hiding confirmed
+
+Refuted (4) — auditor found no physical corroboration:
+- T1071.001 — memory signal `established` only; netscan showed no active HTTP C2 connections
+- T1134 — privilege tokens in memory not confirmed as active manipulation
+- T1547.001, T1574 — memory-only signals without disk artifact
+
+Total runtime: 16 minutes. Total cost: $14.
+
+**The agentic pass is what found the attack.** A deterministic sweep alone would have returned one technique flag. The 75-call agentic loop surfaced the backdoor, the injection chain, the account manipulation, and the PsExec artifacts. This is the architecture working as designed.
+
+**The auditor is discriminating, not credulous.** 15 confirmed out of 19 — but the 4 refutals matter. T1071.001 was flagged in memory and refuted on disk because the netscan showed no active web C2 connections. The Auditor distinguished between a memory keyword match and a confirmed active C2 channel.
 
 **Every confirmed finding is independently reproducible.** The audit log contains the exact command, the exact output, and the exact timestamp. There are no findings that require trusting the model.
 

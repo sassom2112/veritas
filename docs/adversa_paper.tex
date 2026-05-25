@@ -50,11 +50,11 @@ a number traceable to a source sample. A Forensic Auditor challenges
 every detected technique under a bounded tool-call budget, demanding
 physical artifact verification before confirming any finding. The system
 was validated on the nfury host from an APT intrusion: triage scored
-100/100 across 9 MITRE techniques; the Auditor confirmed two
-(T1003.002 credential dumping via SAM hive extraction; T1055 process
-injection via memory analysis), refuted seven, and produced a complete
-IOC set linking the \texttt{vibranium} domain account, httppump C2,
-and \texttt{a.exe} loader. All findings
+100/100 across 19 detected techniques; the Auditor confirmed 15
+(including T1003.002 SAM credential dump, T1055 process injection,
+T1569.002 PsExec lateral movement, T1071 httppump HTTP C2, and
+T1136/T1098 attacker account creation) and refuted 4 memory-only
+signals without disk corroboration. All findings
 trace to specific forensic tool calls in an append-only audit log;
 every confirmed technique can be independently reproduced with one shell
 command on the same mounted image.
@@ -553,24 +553,76 @@ current pipeline.
 \toprule
 Machine (IP)      & Triage & Adjusted & Confirmed & Refuted \\
 \midrule
-nfury (10.3.58.6) & 100 & 70 & T1003.002, T1055 & 7 techniques \\
+nfury (10.3.58.6) & 100 & 100 & 15 techniques (see \cref{tab:nfury}) & 4 techniques \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \paragraph{nfury.}
-Triage scored 100/100 across 9 detected techniques. The Auditor
-challenged all 9 in parallel over 25 argumentation rounds and confirmed
-two on physical artifacts. T1003.002 (SAM credential dump) was confirmed
-via registry hive extraction—the SAM hive at
-\texttt{Windows/System32/config/SAM} was verified accessible and the
-attacker account \texttt{vibranium} was confirmed via ProfileList
-analysis (SID \texttt{S-1-5-21-2036804247-3058324640-2116585241-1673}).
-T1055 (Process Injection) was confirmed via Volatility~3 memory
-analysis of the \texttt{a.exe} loader. Seven techniques were refuted.
-The attack chain includes httppump C2 at \texttt{199.73.28.114/ads/}
-and exfiltration via \texttt{system4.rar}. Total runtime: 17 minutes;
-total cost: \$14.
+Pass~1 (deterministic sweep) scored 20/100 on a single technique
+(T1560.001, archive file extensions). Pass~2 (agentic Claude loop,
+75-call budget) surfaced 13 additional techniques and drove the score
+to 100. Volatility~3 memory analysis (parallel) added 6 memory-resident
+detections. Combined triage: 100/100 across 19 detected techniques.
+
+The Auditor challenged all 19 in parallel across 22 argumentation rounds.
+\textbf{15 confirmed, 4 refuted.} \Cref{tab:nfury} lists all confirmed
+techniques.
+
+\begin{table}[ht]
+\centering\small
+\caption{nfury confirmed techniques. Source indicates whether the
+  confirming artifact was found on disk, in memory, or both.}
+\label{tab:nfury}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Technique & Name & Source \\
+\midrule
+T1003.002 & SAM Credential Dump & disk+memory \\
+T1005     & Data from Local System & disk \\
+T1036     & Masquerading & disk \\
+T1036.005 & Binary Name Match & disk \\
+T1055     & Process Injection & disk+memory \\
+T1071     & Application Layer Protocol & disk \\
+T1078     & Valid Accounts & disk \\
+T1098     & Account Manipulation & disk \\
+T1105     & Ingress Tool Transfer & disk \\
+T1136     & Create Account & disk \\
+T1140     & Deobfuscate/Decode & disk \\
+T1547     & Boot/Logon Autostart & disk \\
+T1560.001 & Archive via Utility & disk \\
+T1564     & Hide Artifacts & disk \\
+T1569.002 & PsExec (System Services) & disk \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Key physical artifacts: a \texttt{svchost.exe} masquerade binary
+(102,400\,B, SHA-256: \texttt{f293fdb9\ldots}) staged in the
+\texttt{\$Recycle.Bin} under the vibranium SID, timestomped to
+2008-04-14, containing a hardcoded C2 URL
+(\texttt{http://192.168.1.5/ads/}) and the full WININET.dll HTTP API
+chain (\texttt{HttpSendRequestA}, \texttt{HttpOpenRequestA}). A 9\,KiB
+loader (\texttt{a.exe}, PDB: \texttt{httppump/inner/i.pdb}) at
+\texttt{vibranium/AppData/Local/Temp/} carries
+\texttt{WriteProcessMemory}/\texttt{VirtualAlloc}/\texttt{CreateThread}
+imports; Volatility~3 \texttt{windows.malfind} returned 127
+\texttt{PAGE\_EXECUTE\_READWRITE} anonymous VAD hits across
+\texttt{LogonUI.exe} and \texttt{FrameworkServi}. Account \texttt{SRL-Helpdesk}
+was created (Event~ID 4720) on 2012-03-13\,UTC and confirmed as an
+attacker-planted service account. T1569.002 (PsExec) was confirmed by
+\texttt{psexesvc.exe} on disk---a finding that was wrongly refuted in
+an earlier run due to a validator over-blocking bug (see
+\cref{sec:lessons}).
+
+Four refutals demonstrate the Auditor's discrimination:
+T1071.001 was flagged in memory from the string \texttt{established};
+Volatility \texttt{windows.netscan} showed no active connections on
+HTTP/HTTPS ports---the finding was refuted as a weak keyword match.
+T1134, T1547.001, and T1574 were similarly refuted as memory-only
+signals without disk corroboration.
+
+Total runtime: 969\,s ($\approx$16\,min); total cost: \$14.
 
 \subsection{Earlier Pipeline — Lessons Learned}
 \label{sec:lessons}
@@ -822,9 +874,10 @@ deployment against live endpoints—in a 1,000-endpoint environment it
 would generate approximately 870 analyst reviews per sweep. It is
 suitable for forensic triage of known-suspicious disk images where the
 base rate of compromise is high. The Forensic Auditor mitigates this in
-deployment: on nfury, the Auditor correctly refuted 7 of 9 triage
-detections, reducing the analyst workload from nine technique
-investigations to two.
+deployment: on nfury, the Auditor correctly confirmed 15 of 19 triage
+detections and refuted 4 memory-only signals, reducing analyst
+ambiguity from 19 unverified flags to 15 confirmed findings with
+artifact citations.
 
 The rate is explained structurally by two factors. First, a training
 imbalance: the Mordor dataset provides \num{49519} attack events
@@ -907,11 +960,14 @@ F1~=~0.72 over \num{4500} iterations with no human intervention. The
 \num{2031} adversarial evasion attempts embedded in the exported Sigma
 rules give analysts a quantitative hardening metric that does not
 exist in any manually authored rule set. The nfury host from an APT intrusion with Chinese-language artifacts
-was investigated autonomously; the Forensic Auditor correctly refuted
-7 of 9 triage detections and confirmed T1003.002 and T1055 on physical
-artifacts. The \texttt{vibranium} domain account (SID confirmed in
-ProfileList) and httppump C2 infrastructure were fully characterized
-from a single autonomous run.
+was investigated autonomously; the Forensic Auditor confirmed 15 of 19
+triage detections on physical artifacts and refuted 4 memory-only
+signals. The complete attack chain---httppump backdoor
+(\texttt{svchost.exe} in \texttt{\$Recycle.Bin}, timestomped,
+C2 at \texttt{192.168.1.5/ads/}), injector (\texttt{a.exe},
+127 \texttt{PAGE\_EXECUTE\_READWRITE} VADs), attacker account
+(\texttt{SRL-Helpdesk}, Event~ID~4720), and PsExec lateral
+movement---was characterized in 969\,s at \$14 cost.
 
 Every other approach gives defenders better tools. find-evil gives
 defenders the same adaptive mechanism that makes AI attacks

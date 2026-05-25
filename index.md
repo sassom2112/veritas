@@ -25,14 +25,14 @@ python3 custom-agent/investigate.py /mnt/hostname
 
 | Stat | Value |
 |------|-------|
-| APT machines investigated | 4 |
-| False positives caught by Auditor | 2 |
-| Confirmed findings verified on disk | 100% |
+| Techniques confirmed on nfury (current pipeline) | 15 of 19 detected |
+| Techniques refuted by Auditor | 4 |
+| Confirmed findings with physical artifact citation | 100% |
 | MCP security layers | 4 |
 | MITRE techniques covered by corpus weights | 9 |
 | Malware samples in corpus | 800+ |
-| Auditor challenge rounds per technique | 5 |
-| Investigation cost | ~$14 / 17 min |
+| Auditor challenge rounds per technique | up to 5 |
+| Investigation cost | ~$14 / 16 min |
 
 ---
 
@@ -63,11 +63,16 @@ Independent parallel re-verification of every finding. Up to 5 challenge rounds 
 
 | Phase | Score | Detail |
 |------|-------|--------|
-| Triage | 100/100 | 9 techniques detected |
-| Auditor adjusted | 70/100 | 2 confirmed, 7 refuted |
+| Triage Pass 1 (deterministic) | 20/100 | 1 technique — T1560.001 only |
+| Triage Pass 2 (agentic, 75 calls) | 100/100 | 14 additional techniques surfaced |
+| Memory (Volatility 3, parallel) | 100/100 | 6 memory-resident techniques |
+| Auditor adjusted | 100/100 | 15 confirmed, 4 refuted |
 | Verdict | HIGH | Active compromise confirmed |
 
-Confirmed: **T1003.002** (SAM credential dump), **T1055** (process injection via a.exe loader).
-Attack chain: httppump C2 at 199.73.28.114/ads/, attacker account `vibranium`, exfil via system4.rar.
+Confirmed (15): T1003.002, T1005, T1036, T1036.005, T1055, T1071, T1078, T1098, T1105, T1136, T1140, T1547, T1560.001, T1564, **T1569.002** (PsExec).
+Refuted (4): T1071.001, T1134, T1547.001, T1574 — memory signals without disk corroboration.
+
+Key artifacts: httppump backdoor (`svchost.exe` in `$Recycle.Bin`, timestomped to 2008-04-14, C2 at `192.168.1.5/ads/`), `a.exe` injector (127 `PAGE_EXECUTE_READWRITE` VADs via Volatility malfind), `SRL-Helpdesk` account creation (Event ID 4720), `psexesvc.exe` on disk, `system4.rar` + `chrome.7z` exfil staging.
+Attacker account: `vibranium` (SID S-1-5-21-2036804247-3058324640-2116585241-1673).
 
 Additional hosts (controller, tdungan, nromanoff) pending re-run with current pipeline.
