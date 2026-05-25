@@ -104,6 +104,18 @@ controller confirming spinlock.exe loaded and crashed. Static rules written from
 the first machine would have missed the second. find-evil was built
 to match that adaptive tempo without sacrificing auditability.
 
+An LLM-based security agent faces an analogous threat: an attacker
+who can write to logs, craft alert metadata, or control file system
+artifacts can influence what the agent sees and concludes. Prompt-level
+guardrails are the equivalent of a standard (non-hardened) classifier---
+they work until the adversary pushes past $\varepsilon$. The
+architectural answer at the model level was adversarial training with
+separation between clean and adversarial loss. The architectural answer
+at the system level is the same kind of separation: agents that receive
+findings but not reasoning, auditors that have a mandate to refute rather
+than confirm, tool servers that validate before any subprocess executes.
+find-evil implements all three.
+
 %% ── 2. System Overview ──────────────────────────────────────────────────────
 \section{System Overview}
 \label{sec:overview}
