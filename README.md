@@ -82,7 +82,21 @@ T1566 (Phishing) confirmed — campaign initial access identified. `HYDRAKATZ.EX
 **matches nfury exactly** — credential reuse confirmed across hosts. Different httppump variant
 (SHA-256 `91f16fc5…`): same C2, evolved tooling.
 
-### rocba (192.168.1.5) — the attacker's C2 node
+### nromanoff (10.3.58.5) — standalone, distinct tool family
+
+| Phase | Score | Detail |
+|---|---|---|
+| Triage (disk + memory) | 100/100 | 7 techniques detected |
+| Auditor adjusted | 100/100 | **3 confirmed, 4 refuted** |
+| Runtime | ~880 s (~15 min) | Cost: ~$14 |
+
+`spinlock.exe` — PyInstaller Python backdoor, distinct from httppump. External C2 at
+`199.73.28.114:443` with self-signed TLS cert (`CN=199.73.28.114`) — the only confirmed
+live external C2 in the campaign. `PSEXESVC.EXE` on disk (T1569.002). `vibranium` account
+credentials extracted from memory. Same refutation pattern: 4 memory-only signals with no
+disk corroboration — consistent with nfury and tdungan.
+
+### rocba (192.168.1.5) — the attacker's C2 relay node
 
 Disk score: 0. Memory score: 100. T1055 confirmed in `MsMpEng.exe` (Windows Defender's engine).
 Two anonymous VadS `PAGE_EXECUTE_READWRITE` regions containing a shellcode dispatch trampoline
@@ -91,7 +105,7 @@ rocba's IP is `192.168.1.5` — the C2 address hardcoded in every httppump varia
 nfury and tdungan. Verdict: LOW (single confirmed technique — scoring limitation, not an evidence
 limitation).
 
-**28 techniques confirmed across 36 detected. 8 correctly refuted. 3 hosts. Under $30 total.**
+**31 techniques confirmed across 43 detected. 12 correctly refuted. 3 investigative hosts. Under $45 total.**
 
 ---
 

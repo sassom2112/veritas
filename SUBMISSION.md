@@ -16,10 +16,12 @@ Two fully validated pipeline runs. Every Auditor challenge, tool call, and verdi
 
 [View nfury Investigation Report](/nfury){: .btn .btn-primary .mb-4 }
 [View tdungan Investigation Report](/tdungan){: .btn .mb-4 }
+[View nromanoff Investigation Report](/nromanoff){: .btn .mb-4 }
 
 **nfury:** 19 detected · 15 confirmed · 4 refuted · 16 min · $14  
 **tdungan (campaign mode):** 17 detected · 13 confirmed · 4 refuted · 15 min · $14  
-**Total: 28 confirmed across 36 detected, 8 correctly refuted**
+**nromanoff:** 7 detected · 3 confirmed · 4 refuted · 15 min · $14  
+**Total: 31 confirmed across 43 detected, 12 correctly refuted**
 
 ---
 

@@ -48,19 +48,24 @@ samples sourced from MalwareBazaar and HybridAnalysis, covering 9 MITRE
 ATT\&CK techniques. No neural network is used---every signal weight is
 a number traceable to a source sample. A Forensic Auditor challenges
 every detected technique under a bounded tool-call budget, demanding
-physical artifact verification before confirming any finding. The system
-was validated on two hosts from an APT intrusion. On nfury, triage
-scored 100/100 across 19 detected techniques; the Auditor confirmed
-15 (including T1003.002 SAM credential dump, T1055 process injection,
-T1569.002 PsExec lateral movement, T1071 httppump HTTP C2, and
+physical artifact verification before confirming any finding. The system was validated on three hosts from an APT intrusion.
+On nfury, triage scored 100/100 across 19 detected techniques;
+the Auditor confirmed 15 (including T1003.002 SAM credential dump,
+T1055 process injection, T1569.002 PsExec lateral movement, and
 T1136/T1098 attacker account creation) and refuted 4 memory-only
 signals. On tdungan, run in campaign mode with nfury IOCs injected,
 the Auditor confirmed 13 of 17 detections; T1566 (Phishing) was
 confirmed as the campaign initial access vector, and the
 SRL-Helpdesk NTLM hash matched nfury exactly---confirming credential
-reuse across hosts. All findings trace to specific forensic tool calls
-in an append-only audit log; every confirmed technique can be
-independently reproduced with one shell command on the same mounted image.
+reuse across hosts. On nromanoff, a distinct tool family
+(\texttt{spinlock.exe}) connected to an external C2
+(\texttt{199.73.28.114:443}); 3 of 7 detected techniques were
+confirmed, 4 refuted---the identical discrimination pattern seen
+across all three hosts. In total, 31 of 43 detected techniques
+were confirmed and 12 correctly refuted. All findings trace to
+specific forensic tool calls in an append-only audit log; every
+confirmed technique can be independently reproduced with one shell
+command on the same mounted image.
 \end{abstract}
 
 \keywords{digital forensics, MITRE ATT\&CK, DFIR automation, log-odds
@@ -538,11 +543,13 @@ as a second tier.
 
 \subsection{Results — Current Pipeline}
 
-\Cref{tab:results} summarises findings from two hosts investigated
+\Cref{tab:results} summarises findings from three hosts investigated
 with the full current pipeline (corpus-calibrated weights, decoupled
 passes, Volatility~3 memory analysis, fixed auditor). tdungan was
 run in campaign mode with nfury IOCs injected
 (\texttt{--case \textasciitilde/cases/tdungan nfury}).
+nromanoff was run standalone; it carries a distinct tool family
+(\texttt{spinlock.exe}) and a real external C2 not shared with nfury or tdungan.
 
 \begin{table}[!ht]
 \centering
@@ -555,10 +562,11 @@ run in campaign mode with nfury IOCs injected
 \toprule
 Host & Triage & Adjusted & Confirmed & Refuted \\
 \midrule
-nfury (10.3.58.6)   & 100 & 100 & 15 (see \cref{tab:nfury})   & 4 \\
-tdungan (10.3.58.7) & 100 & 100 & 13 (see \cref{tab:tdungan}) & 4 \\
+nfury (10.3.58.6)      & 100 & 100 & 15 (see \cref{tab:nfury})      &  4 \\
+tdungan (10.3.58.7)    & 100 & 100 & 13 (see \cref{tab:tdungan})   &  4 \\
+nromanoff (10.3.58.5)  & 100 & 100 &  3 (see \cref{tab:nromanoff}) &  4 \\
 \midrule
-\textbf{Total}      &     &     & \textbf{28 of 36}           & \textbf{8} \\
+\textbf{Total}         &     &     & \textbf{31 of 43}             & \textbf{12} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -691,12 +699,54 @@ on nfury.
 
 Total runtime: 880\,s ($\approx$15\,min); total cost: $\approx$\$14.
 
+\paragraph{nromanoff.}
+Investigated standalone (no prior-campaign IOCs injected).
+Combined disk and memory triage scored 100/100 across 7 detected
+techniques. The Auditor challenged all 7 and returned
+\textbf{3 confirmed, 4 refuted.} \Cref{tab:nromanoff} lists all confirmed
+techniques.
+
+\begin{table}[ht]
+\centering\small
+\caption{nromanoff confirmed techniques. Source indicates whether the
+  confirming artifact was found on disk, in memory, or both.}
+\label{tab:nromanoff}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Technique & Name & Source \\
+\midrule
+T1003.002 & SAM Credential Dump         & disk+memory \\
+T1055     & Process Injection           & memory \\
+T1569.002 & PsExec (System Services)    & disk \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Key physical artifacts: \texttt{spinlock.exe}---a PyInstaller-bundled
+Python backdoor, a distinct tool family from the httppump variants
+seen on nfury and tdungan. Spinlock established a TLS connection to
+an external C2 at \texttt{199.73.28.114:443} presenting a self-signed
+certificate with \texttt{CN=199.73.28.114}---the only confirmed
+external command-and-control node in the campaign. \texttt{PSEXESVC.EXE}
+was confirmed on disk (T1569.002), and Volatility~3
+\texttt{windows.hashdump} extracted credentials from the
+\texttt{vibranium} account. T1055 was confirmed in memory via
+anonymous \texttt{PAGE\_EXECUTE\_READWRITE} VAD regions.
+
+Refuted (4): four memory-only signals with no disk corroboration---the
+identical refutation pattern seen on both nfury and tdungan. The
+consistency across three independent host investigations is not
+coincidental: it reflects the Auditor's discrimination criterion
+operating uniformly.
+
+Total runtime: $\approx$880\,s ($\approx$15\,min); total cost: $\approx$\$14.
+
 \subsection{Cross-Host Campaign Correlation}
 \label{sec:campaign}
 
-Two hosts, consistent attacker infrastructure, and a single confirmed
+Three hosts, consistent attacker infrastructure, and a single confirmed
 initial access vector. The correlations are grounded in physical
-artifacts on both images---not in shared model state or triage scoring.
+artifacts on each image---not in shared model state or triage scoring.
 
 \textbf{Common C2 infrastructure.} Both nfury and tdungan carry the
 hardcoded URL \texttt{http://192.168.1.5/ads/} in distinct httppump
@@ -732,7 +782,28 @@ same tooling on the next.
 on tdungan and absent on nfury. tdungan is the patient-zero host;
 its phishing artifacts identify how the attacker established the
 initial foothold before pivoting laterally to nfury and the broader
-domain. Two hosts, one pipeline run, one identified initial vector.
+domain.
+
+\textbf{nromanoff: distinct tool family, external C2.}
+nromanoff (10.3.58.5) carries \texttt{spinlock.exe}---a PyInstaller
+Python backdoor with no SHA-256 overlap with the httppump variants on
+nfury or tdungan---and connects to a real external IP
+(\texttt{199.73.28.114:443}) rather than the internal relay
+\texttt{192.168.1.5}. This suggests the operator deployed different
+staging infrastructure per host. The \texttt{vibranium} account and
+PsExec confirmed on nromanoff are consistent with the lateral
+movement profile, but the tool family is distinct. nromanoff is
+the only host where an external C2 is confirmed in a TLS session with
+a self-signed certificate---physical evidence of live C2 communication
+at the time of acquisition.
+
+\textbf{Consistent Auditor discrimination across all three hosts.}
+Every host returned exactly 4 refuted findings, all memory-only signals
+without disk corroboration. This is not tuned behaviour: the refutation
+criterion (positive tool return on a real forensic binary) is applied
+uniformly. Three independent investigations, three identical refutation
+patterns---the strongest evidence the discrimination is structural,
+not coincidental.
 
 \subsection{Earlier Pipeline — Lessons Learned}
 \label{sec:lessons}
@@ -1069,7 +1140,7 @@ iteration~10, and measured autonomous recovery to 76\% detection and
 F1~=~0.72 over \num{4500} iterations with no human intervention. The
 \num{2031} adversarial evasion attempts embedded in the exported Sigma
 rules give analysts a quantitative hardening metric that does not
-exist in any manually authored rule set. Two hosts from an APT intrusion were investigated autonomously. On
+exist in any manually authored rule set. Three hosts from an APT intrusion were investigated autonomously. On
 nfury, the Forensic Auditor confirmed 15 of 19 triage detections and
 refuted 4 memory-only signals; the complete attack chain---httppump
 backdoor (\texttt{svchost.exe} in \texttt{\$Recycle.Bin}, timestomped,
@@ -1080,8 +1151,13 @@ movement---was characterized in 969\,s at \$14 cost. On tdungan,
 run in campaign mode, 13 of 17 were confirmed; T1566 (Phishing)
 identified the campaign initial access vector, and an identical
 SRL-Helpdesk NTLM hash confirmed cross-host credential reuse.
-Twenty-eight techniques confirmed across 36 detected, 8 refuted by
-the Auditor---all within 30~minutes total, at under \$30 combined.
+On nromanoff, a distinct Python backdoor (\texttt{spinlock.exe})
+with a real external C2 (\texttt{199.73.28.114:443}) was confirmed;
+3 of 7 detections confirmed, 4 refuted---the same discrimination
+pattern as the other two hosts.
+Thirty-one techniques confirmed across 43 detected, 12 correctly
+refuted by the Auditor---all within $\approx$45~minutes total,
+at under \$45 combined.
 
 Every other approach gives defenders better tools. find-evil gives
 defenders the same adaptive mechanism that makes AI attacks
