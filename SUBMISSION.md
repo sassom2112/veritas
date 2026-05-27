@@ -10,13 +10,16 @@ ADVERSA runs on a SANS SIFT workstation against mounted Windows disk images. The
 
 ---
 
-## Live Investigation Report
+## Live Investigation Reports
 
-The nfury investigation is the validated run of the current pipeline. The full Auditor transcript — every challenge round, every tool call, every verdict — is interactive and browsable.
+Two fully validated pipeline runs. Every Auditor challenge, tool call, and verdict is interactive and browsable.
 
 [View nfury Investigation Report](/nfury){: .btn .btn-primary .mb-4 }
+[View tdungan Investigation Report](/tdungan){: .btn .mb-4 }
 
-nfury: triage 100/100 across 9 techniques. Auditor confirmed 2 (T1003.002, T1055), refuted 7. 17 minutes. $14.
+**nfury:** 19 detected · 15 confirmed · 4 refuted · 16 min · $14  
+**tdungan (campaign mode):** 17 detected · 13 confirmed · 4 refuted · 15 min · $14  
+**Total: 28 confirmed across 36 detected, 8 correctly refuted**
 
 ---
 
@@ -54,15 +57,17 @@ python3 custom-agent/sift_server.py
 python3 custom-agent/investigate.py /mnt/hostname
 ```
 
-Runs Triage → Auditor → HTML report. IOCs auto-carry to the next host.
+Runs Triage → Auditor → HTML report.
 
-**Campaign mode** — IOCs from completed hosts are auto-detected:
+**Campaign mode** — declare prior hosts explicitly to propagate confirmed IOCs:
 
 ```bash
-python3 custom-agent/investigate.py /mnt/host1
-python3 custom-agent/investigate.py /mnt/host2   # host1 IOCs injected automatically
-python3 custom-agent/investigate.py /mnt/host3   # host1 + host2 IOCs
+python3 custom-agent/investigate.py --case ~/cases/nfury
+python3 custom-agent/investigate.py --case ~/cases/tdungan nfury
+python3 custom-agent/investigate.py --case ~/cases/controller nfury tdungan
 ```
+
+Host names resolve to `reports/<host>-iocs.json`. Explicit declaration required — IOCs are never injected automatically, preventing cross-campaign contamination.
 
 ---
 

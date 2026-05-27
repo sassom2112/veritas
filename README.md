@@ -1,188 +1,192 @@
 # ADVERSA — Autonomous Windows Forensic Investigation
 
-A three-phase pipeline for dead-disk and memory forensics on Windows images. Deterministic triage,
-agentic deep investigation, adversarial audit. Every confirmed finding is backed by a physical
-artifact on disk — not model confidence.
+A three-phase pipeline for dead-disk and memory forensics on Windows images.
+Deterministic triage → agentic investigation → adversarial audit.
+**Every confirmed finding is backed by a physical artifact on disk — not model confidence.**
 
-Built for the **SANS FIND EVIL! Hackathon 2026**.
-
----
-
-## The Problem
-
-A senior examiner takes 48 hours to fully characterize a compromised Windows host. A coordinated
-intrusion hits 50 endpoints simultaneously. The math does not work. The bottleneck is not
-attacker speed — once the image is acquired, the bits are frozen. The bottleneck is
-**Time-to-Understanding**: how long until a human investigator knows what happened.
-
-ADVERSA targets that number. A full disk and memory investigation runs in 17 minutes for $14 in
-API cost. It can run on N machines in parallel overnight. A human analyst reviews confirmed
-findings, not raw tool output.
-
-The second problem is hallucination. LLMs find evidence because they are trained to be helpful.
-On the nfury image, the triage pass scored 9 techniques. The adversarial auditor confirmed 2 and
-refuted 7. Without independent verification, 7 false accusations would have entered the report.
-Prompt instructions do not fix this. Architectural separation does.
+Built for the **SANS FIND EVIL! Hackathon 2026** · Category 7: Persistent Learning Loop
 
 ---
 
-## Pipeline
+## The Problem Nobody Solved
 
-```
-Disk image + memory dump
-         │
-         ▼
-   Pass 1 — Deterministic scan (~25 SIFT commands, <60 s)
-   Corpus-calibrated log-odds scoring across 9 MITRE techniques
-         │
-         ▼
-   Pass 2 — Agentic investigation (75-call budget, Claude Sonnet)
-   Sequences tool calls like a senior examiner: event logs → prefetch →
-   registry hives → MFT → shellbags → hash verification
-   Receives raw artifacts only — no Pass 1 score, no technique labels
-         │
-   Memory — Volatility 3 in parallel
-   Process injection, hollowing, rootkits invisible on disk
-         │
-         ▼
-   Forensic Auditor (up to 5 rounds × 2 tool calls per technique)
-   Receives finding list only — no access to prior reasoning
-   Mandate: assume every finding is a false positive until the
-   filesystem proves otherwise
-         │
-         ▼
-   IOC extraction → HTML report → campaign propagation
-```
+Every tool closes the speed gap. ADVERSA closes the trust gap.
 
-All tool execution passes through a 4-gate validator (`sift_server.py`) before any subprocess
-call. Evidence modification is architecturally impossible — not prompt-dependent.
+Autonomous AI investigators hallucinate. Ask an LLM whether credential dumping occurred and it
+will find something that looks like credential dumping — whether or not the binary is actually on
+disk. Prompt instructions do not fix this. The leading platform in this space (Valhuntir) reached
+the same conclusion and kept the human in the loop.
+
+**ADVERSA is the architecture that removes the human from the verification loop without losing
+forensic integrity.** A finding is only CONFIRMED when a second independent agent — one that
+receives the findings list and nothing else — calls a real forensic tool and reads physical bytes
+off disk. Model confidence produces neither CONFIRMED nor REFUTED.
 
 ---
 
-## Detection Signal Stack
+## Architecture
 
-Two sources feed Pass 1 scoring. Both are transparent substring matches — no black-box weights.
+![ADVERSA Pipeline Architecture](docs/adversa-architecture.png)
 
-**Corpus-calibrated weights** (`data/calibrated_weights.json`)
+**Phase 1 — Deterministic triage** (~25 SIFT commands, no LLM, <60 s)
+Corpus-calibrated log-odds weights from 800+ labeled malware samples. Fully reproducible.
 
-Log-odds ratios derived from 800+ labeled malware samples (MalwareBazaar + HybridAnalysis).
-For each `(technique, signal)` pair:
+**Phase 2 — Triage Agent (The Optimist)** (75-call Claude budget)
+Investigates event logs, prefetch, SAM hives, registry, network artifacts.
+Receives raw artifacts only — no Phase 1 score, no technique labels. Structural decoupling.
 
-```
-log_odds = log2( (p_malware + 0.05) / (p_benign + 0.05) )
-weight   = normalize(log_odds) → [0, 1]
-```
+**Memory — Volatility 3** (parallel)
+Process injection, VAD anomalies, credential dumps invisible on disk.
 
-Cross-technique tokens capped at 0.2 (IDF-equivalent). Base signals from confirmed cases
-floored at 0.5. Every weight is traceable to a source sample.
+**Phase 3 — Forensic Auditor (The Cynic)** (parallel, isolated MCP sessions)
+Receives the findings list and nothing else. Mandate: assume every finding is false until
+the filesystem proves otherwise. CONFIRMED requires a positive tool return value.
+Runs all challenges concurrently via `asyncio.gather`.
 
-Covers 9 techniques: T1003.001/002, T1059.001, T1071.001, T1087.001, T1547.001, T1548.002,
-T1560.001, T1569.002.
-
-**Sysmon ASL operational rules** (`reports/operational_rules.json`)
-
-Trained adversarially on 49,519 real Windows Sysmon events (OTRF Mordor datasets). A Red Agent
-generates evasion variants; a Blue Agent extracts discriminating field values from misses. Rules
-are literal substrings from real telemetry — no hand-authored patterns.
-
-Domain gap exists: Sysmon signals reference event fields absent from disk forensic output. These
-rules supplement corpus weights but do not replace them on disk artifacts.
+**IOC extraction → HTML report → campaign propagation**
 
 ---
 
 ## Results
 
-One full-pipeline case (disk + memory, calibrated weights, current auditor):
+Three hosts, real SANS case data. All findings independently reproducible from audit log.
 
-**nfury** — APT1-era intrusion, httppump C2 (199.73.28.114/ads/), attacker account `vibranium`
+### nfury (10.3.58.6) — full pipeline
 
-| Phase | Score | Techniques |
+| Phase | Score | Detail |
 |---|---|---|
-| Triage (disk) | 100/100 | 9 detected |
-| Triage (memory) | 100/100 | overlapping |
-| Auditor adjusted | 70/100 | 2 confirmed, 7 refuted |
-| Verdict | HIGH | Active compromise confirmed |
+| Triage Pass 1 (deterministic) | 20/100 | T1560.001 — archive file extensions |
+| Triage Pass 2 (agentic, 75 calls) | 100/100 | 13 additional techniques surfaced |
+| Memory (Volatility 3, parallel) | 100/100 | 6 memory-resident techniques |
+| Auditor adjusted | 100/100 | **15 confirmed, 4 refuted** |
+| Runtime | 969 s (~16 min) | Cost: ~$14 |
 
-Confirmed: **T1003.002** (SAM credential dump), **T1055** (process injection via a.exe loader)
+Confirmed attack chain: httppump backdoor (`svchost.exe` in `$Recycle.Bin`, timestomped 2008,
+SHA-256 `f293fdb9…`), C2 at `192.168.1.5/ads/`, loader `a.exe` (PDB: `httppump/inner/i.pdb`,
+127 `PAGE_EXECUTE_READWRITE` VADs via malfind), `SRL-Helpdesk` account creation (Event ID 4720),
+`psexesvc.exe` on disk (T1569.002), `system4.rar` + `chrome.7z` exfil staging.
 
-One of the 7 auditor refutals (T1569.002, PsExec) was a validator bug — `'service '` hard-block
-was rejecting EventID 7045 grep commands. Fixed and committed; re-run pending.
+Refuted (4): T1071.001, T1134, T1547.001, T1574 — memory-only signals, no disk corroboration.
+**The refutals are the proof the architecture works.**
 
-Earlier pipeline versions (pre-calibrated weights, pre-auditor fix) ran on controller and tdungan.
-Those results are in `SUBMISSION.md` and are not directly comparable to the current system.
+### tdungan (10.3.58.7) — campaign mode with nfury IOCs
+
+| Phase | Score | Detail |
+|---|---|---|
+| Triage (disk + memory) | 100/100 | 17 techniques detected |
+| Auditor adjusted | 100/100 | **13 confirmed, 4 refuted** |
+| Runtime | 880 s (~15 min) | Cost: ~$14 |
+
+T1566 (Phishing) confirmed — campaign initial access identified. `HYDRAKATZ.EXE` in Prefetch
+(Hydra + Mimikatz, purpose-built credential harvester). `SRL-Helpdesk` NTLM hash `4c3f5e9f…`
+**matches nfury exactly** — credential reuse confirmed across hosts. Different httppump variant
+(SHA-256 `91f16fc5…`): same C2, evolved tooling.
+
+### rocba (192.168.1.5) — the attacker's C2 node
+
+Disk score: 0. Memory score: 100. T1055 confirmed in `MsMpEng.exe` (Windows Defender's engine).
+Two anonymous VadS `PAGE_EXECUTE_READWRITE` regions containing a shellcode dispatch trampoline
+(`push rsi/rdi/rbx; sub rsp, 0x28; jmp rdx`). The attacker injected into their own AV.
+rocba's IP is `192.168.1.5` — the C2 address hardcoded in every httppump variant recovered from
+nfury and tdungan. Verdict: LOW (single confirmed technique — scoring limitation, not an evidence
+limitation).
+
+**28 techniques confirmed across 36 detected. 8 correctly refuted. 3 hosts. Under $30 total.**
 
 ---
 
 ## Security Boundary
 
-![ADVERSA Guardrails](docs/adversa-guardrails.png)
+![ADVERSA Security Boundary](docs/adversa-guardrails.png)
 
-Four gates, enforced in code before any subprocess call:
+Every forensic action flows through one MCP primitive: `run_terminal_command`.
+Four gates execute in Python before any subprocess call.
 
-1. **Hard-blocked strings** — 22 tokens: destructive ops (`shred`, `mkfs`, `fdisk`), exfil
-   (`wget`, `curl`, `nc`, `ssh`), privilege escalation (`sudo`, `pkexec`), injection
-   (`$(`, `` ` ``, `${`, `system(`), specific service control verbs
-2. **Binary allowlist** — 53 approved SIFT forensic tools. Unknown binaries rejected
-   unconditionally. `sed` excluded — its `-e` flag passes the pattern space to the shell.
-3. **Quote-aware pipeline parser** — each pipe segment validated independently. Handles
-   `grep -iE '(http|https|ftp)'` without splitting on `|` inside quoted arguments.
-4. **Write-target guard** — all `>`, `>>`, and `tee` targets resolved with `os.path.realpath`
-   and must land inside `reports/`. Symlink traversal and `../` injection fail at the math level.
+1. **Hard-blocked strings** — 22 tokens: `shred`, `mkfs`, `curl`, `wget`, `nc`, `sudo`,
+   `$()`, backtick, `system(`, specific service control verbs. Command substitution blocked
+   because an attacker-controlled log can inject a second command as an argument.
+2. **53-binary SIFT allowlist** — unknown binaries rejected unconditionally. `sed` excluded —
+   its `-e` flag passes the pattern space to the shell.
+3. **Quote-aware pipeline parser** — tracks single-quoted substrings; `|` inside quotes is
+   argument content, not a separator. Required for `grep -iE '(http|https|ftp)'`.
+4. **Write-target guard** — all `>`, `>>`, `tee` targets resolved via `os.path.realpath()`.
+   Must land inside `reports/`. Symlink and `../` injection fail at the math level.
 
 `audit_log.jsonl` is appended atomically via `os.open + os.write` before every subprocess call.
-Blocked commands log `blocked_reason`. The audit trail cannot be overwritten through a tool call.
-
-Evidence mounts are `ro,norecovery` at the kernel level. The application validator is a second
-layer, not the first.
+Evidence modification is structurally impossible — not prompt-dependent.
 
 ---
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/sassom2112/adversa.git
-cd adversa
+git clone https://github.com/sassom2112/find-evil-2026.git
+cd find-evil-2026
 pip install -r requirements.txt
 export ANTHROPIC_API_KEY="sk-ant-..."
 
-# Terminal 1 — forensic tool server
+# Terminal 1 — MCP forensic tool server
 python3 custom-agent/sift_server.py
 
 # Terminal 2 — full investigation
-python3 custom-agent/investigate.py /mnt/hostname
+python3 custom-agent/investigate.py --case /mnt/hostname
 
-# Fast triage only — no API key, <10 s
+# Fast deterministic triage only — no API key, <10 s
 python3 fast-triage/fast_triage.py /mnt/hostname
 ```
 
-Requires a mounted Windows disk image. The framework reads via standard SIFT/Sleuth Kit tools —
-no write access to evidence.
+Requires a mounted Windows disk image (read-only). The framework reads via standard SIFT/Sleuth
+Kit tools — no write access to evidence.
 
-### Campaign mode
+### Campaign mode — explicit IOC propagation
 
 ```bash
-python3 custom-agent/investigate.py /mnt/nromanoff
-python3 custom-agent/investigate.py /mnt/nfury reports/nromanoff-iocs.json
-python3 custom-agent/investigate.py /mnt/controller reports/nromanoff-iocs.json reports/nfury-iocs.json
+# Investigate first host
+python3 custom-agent/investigate.py --case ~/cases/nfury
+
+# Second host with nfury IOCs injected (explicit declaration required)
+python3 custom-agent/investigate.py --case ~/cases/tdungan nfury
+
+# Third host with all prior IOCs
+python3 custom-agent/investigate.py --case ~/cases/controller nfury tdungan
 ```
 
-Each run writes `reports/<hostname>-iocs.json`. Pass prior IOC files explicitly to propagate
-confirmed indicators across the investigation. `investigate.py` auto-detects IOC files in
-`reports/` if none are passed.
+Host names resolve to `reports/<host>-iocs.json`. Explicit declaration prevents cross-campaign
+contamination — IOCs are never injected automatically.
 
 ### Rebuild signal weights
 
 ```bash
 # Collect malware corpus from MalwareBazaar + HybridAnalysis
 MB_API_KEY=your_key HA_API_KEY=your_key python3 custom-agent/build_corpus.py --limit 100
-
-# Recompute log-odds weights
-python3 custom-agent/compute_weights.py
+python3 custom-agent/compute_weights.py        # → data/calibrated_weights.json
 
 # Retrain Sysmon ASL (requires Mordor datasets — see DATASET.md)
-python3 custom-agent/brain.py
-python3 custom-agent/export_patterns.py
+python3 custom-agent/brain.py                  # ~30 min, 4500 iterations
+python3 custom-agent/export_patterns.py        # → reports/operational_rules.json
 ```
+
+---
+
+## Detection Signal Stack
+
+Two independent signal sources feed Pass 1 scoring.
+
+**Corpus-calibrated weights** (`data/calibrated_weights.json`)
+Log-odds ratios from 800+ labeled samples (MalwareBazaar + HybridAnalysis):
+```
+log_odds = log2( (p_malware + 0.05) / (p_benign + 0.05) )
+weight   = normalize(log_odds) → [0, 1]
+```
+Covers 9 MITRE techniques. Every weight traceable to a source SHA-256.
+
+**Sysmon ASL operational rules** (`reports/operational_rules.json`)
+Trained adversarially on 49,519 real Windows Sysmon events (OTRF Mordor).
+Red Agent generates evasion variants; Blue Agent extracts discriminating field values from misses.
+2,031 logged evasion attempts. Each exported Sigma rule embeds its bypass rate.
+
+Domain gap acknowledged: Sysmon signals reference event fields absent from static disk output.
+These rules supplement corpus weights — they are not disk-validated independently.
 
 ---
 
@@ -190,39 +194,40 @@ python3 custom-agent/export_patterns.py
 
 | File | Role |
 |---|---|
-| `custom-agent/investigate.py` | Orchestrator — runs full pipeline end to end |
-| `custom-agent/blue_agent.py` | Triage agent — Pass 1 scoring + Pass 2 agentic loop |
-| `custom-agent/auditor_agent.py` | Forensic auditor — adversarial re-verification |
-| `custom-agent/sift_server.py` | MCP tool server — 4-gate validator, subprocess execution |
+| `custom-agent/investigate.py` | Orchestrator — full pipeline end to end |
+| `custom-agent/blue_agent.py` | Triage Agent — Pass 1 scoring + Pass 2 agentic loop |
+| `custom-agent/auditor_agent.py` | Forensic Auditor — adversarial parallel re-verification |
 | `custom-agent/memory_agent.py` | Memory analysis — Volatility 3 parallel path |
-| `custom-agent/extract_iocs.py` | IOC extraction — C2 IPs, filenames, accounts |
-| `custom-agent/html_report.py` | HTML report with exec summary, IOC table, transcripts |
+| `custom-agent/sift_server.py` | MCP server — 4-gate validator, subprocess execution |
+| `custom-agent/extract_iocs.py` | IOC extraction — confirmed artifacts only |
+| `custom-agent/html_report.py` | HTML report — exec summary, IOC table, Auditor transcript |
 | `custom-agent/build_corpus.py` | Corpus collection — MalwareBazaar + HybridAnalysis |
 | `custom-agent/compute_weights.py` | Weight calibration — log-odds from corpus |
 | `custom-agent/brain.py` | Sysmon ASL training — Red/Blue adversarial loop |
-| `custom-agent/export_patterns.py` | Exports brain state → `operational_rules.json` |
+| `custom-agent/export_patterns.py` | Exports trained signals → `operational_rules.json` |
 | `fast-triage/fast_triage.py` | Deterministic triage — no LLM, sub-10 s |
 
 ---
 
 ## Honest Limitations
 
-**One validated full-pipeline case.** nfury is the only image run through the current system
-end-to-end. Earlier results on controller and tdungan used a different version.
+**87% false positive rate on benign endpoints.** The triage layer is calibrated for
+high-base-rate forensic investigation of known-suspicious images, not live endpoint monitoring.
+The Auditor mitigates this in deployment — on nfury, 19 triage detections reduced to
+15 confirmed findings with artifact citations.
 
-**9 techniques in corpus weights.** Coverage is real but not comprehensive. Techniques outside
-this set fall back to base signals and Sysmon ASL rules, which have lower precision on disk
-artifacts.
+**Three hosts, one campaign.** nfury, tdungan, and rocba share an operator and C2 infrastructure.
+Generalization to a novel campaign with different tooling is not yet validated.
 
-**Sysmon ASL domain gap.** Signals learned from Windows event logs do not transfer cleanly to
-SIFT disk tool output. They fire on overlapping techniques but should not be treated as
-disk-validated.
+**Sysmon ASL domain gap.** Signals learned from live event telemetry do not transfer cleanly to
+static disk forensic output. Documented, not papered over.
 
-**Auditor refutation rate is high by design.** On nfury: 9 detected, 2 confirmed. This is the
-system working correctly — the triage net is wide, the auditor is strict. One confirmed finding
-backed by physical evidence is more useful than nine findings backed by model confidence.
+**Volatility malfind timeouts.** On large memory images, `windows.malfind` can exceed the
+120 s subprocess timeout. The Auditor falls back to direct vol invocation and marks the finding
+INCONCLUSIVE if evidence cannot be recovered — it fails safe.
 
-**$14/run, ~17 minutes.** Cheap relative to analyst time. Not free.
+**$14/host, ~16 minutes.** Cheap relative to analyst time. Not free. Does not scale to 500
+simultaneous endpoints without parallel infrastructure.
 
 ---
 
