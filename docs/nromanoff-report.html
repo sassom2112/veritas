@@ -1,0 +1,2540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>ADVERSA — nromanoff</title>
+  <style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #0a0e17;
+  --surface: #0d1117;
+  --surf2:   #161b22;
+  --border:  #21262d;
+  --border2: #30363d;
+  --text:    #e6edf3;
+  --dim:     #7d8590;
+  --green:   #3fb950;
+  --red:     #f85149;
+  --amber:   #d29922;
+  --blue:    #58a6ff;
+  --purple:  #bc8cff;
+  --mono:    'SF Mono','Cascadia Code','Fira Code','Consolas',monospace;
+}
+
+body {
+  background: var(--bg); color: var(--text);
+  font-family: var(--mono); font-size: 13px; line-height: 1.6;
+}
+
+.page-wrap { max-width: 1100px; margin: 0 auto; padding: 32px 24px 64px; }
+
+/* ── Header ── */
+.report-header { border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 28px; }
+.report-title  { font-size: 11px; letter-spacing: .15em; text-transform: uppercase; color: var(--blue); margin-bottom: 6px; }
+.report-host   { font-size: 22px; font-weight: 700; }
+.report-meta   { margin-top: 8px; color: var(--dim); font-size: 12px; display: flex; gap: 24px; flex-wrap: wrap; }
+.report-meta span::before { content: '⬡ '; color: var(--border2); }
+
+/* ── Verdict banner ── */
+.verdict-banner {
+  border: 1px solid; border-radius: 6px; padding: 16px 20px; margin-bottom: 28px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.verdict-left  { display: flex; align-items: center; gap: 12px; }
+.verdict-icon  { font-size: 24px; }
+.verdict-text  { font-size: 15px; font-weight: 700; letter-spacing: .02em; }
+.verdict-right { text-align: right; }
+.score-pair    { font-size: 20px; font-weight: 700; }
+.score-arrow   { color: var(--dim); margin: 0 8px; }
+.score-label   { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .1em; }
+
+/* ── Stats ── */
+.stats-row { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: 12px; margin-bottom: 32px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; }
+.stat-value { font-size: 22px; font-weight: 700; }
+.stat-label { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin-top: 2px; }
+
+/* ── Sections ── */
+.section       { margin-bottom: 32px; }
+.section-title {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .15em; color: var(--dim);
+  padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 16px;
+}
+
+/* ── Finding cards ── */
+.finding-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  padding: 16px; margin-bottom: 12px; border-left-width: 3px;
+}
+.confirmed-card { border-left-color: var(--green); }
+.refuted-card   { border-left-color: var(--red);   }
+
+.finding-header   { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+.finding-id-block { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.finding-badge    { font-size: 10px; font-weight: 700; letter-spacing: .1em; padding: 2px 8px; border-radius: 3px; }
+.confirmed-badge  { background: rgba(63,185,80,.15); color: var(--green); border: 1px solid rgba(63,185,80,.3); }
+.refuted-badge    { background: rgba(248,81,73,.15);  color: var(--red);   border: 1px solid rgba(248,81,73,.3); }
+.finding-tid      { font-weight: 700; color: var(--blue); }
+.finding-name     { color: var(--dim); }
+.finding-weight   { font-size: 13px; font-weight: 700; color: var(--green); white-space: nowrap; }
+.refuted-weight   { color: var(--dim); text-decoration: line-through; }
+
+.finding-signals, .finding-tools { font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+.signal-list, .tool-list { color: var(--purple); }
+
+/* ── Confirming evidence block ── */
+.evidence-block {
+  background: rgba(63,185,80,.05); border: 1px solid rgba(63,185,80,.2);
+  border-radius: 4px; padding: 12px 14px; margin: 12px 0;
+}
+.evidence-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--green); margin-bottom: 8px;
+}
+.evidence-pre {
+  font-family: var(--mono); font-size: 11px; color: var(--text);
+  white-space: pre-wrap; word-break: break-all; line-height: 1.5;
+  max-height: 320px; overflow-y: auto;
+}
+
+/* ── Raw output details ── */
+.raw-output-details { margin-top: 8px; }
+.raw-output-summary {
+  cursor: pointer; font-size: 10px; color: var(--dim); letter-spacing: .08em;
+  text-transform: uppercase; user-select: none; list-style: none; padding: 4px 0;
+}
+.raw-output-summary::before       { content: '▶  '; color: var(--border2); }
+details[open] .raw-output-summary::before { content: '▼  '; }
+.raw-output-summary:hover { color: var(--text); }
+.raw-output {
+  font-family: var(--mono); font-size: 11px; color: var(--dim);
+  background: var(--surf2); border: 1px solid var(--border); border-radius: 4px;
+  padding: 10px 12px; margin-top: 6px; white-space: pre-wrap; word-break: break-all;
+  line-height: 1.5; max-height: 400px; overflow-y: auto;
+}
+
+/* ── Rounds ── */
+.finding-rounds { margin-top: 12px; }
+.finding-rounds > summary {
+  cursor: pointer; font-size: 11px; color: var(--dim); text-transform: uppercase;
+  letter-spacing: .08em; user-select: none; padding: 6px 0; list-style: none;
+}
+.finding-rounds > summary::before       { content: '▶  '; color: var(--border2); }
+.finding-rounds[open] > summary::before { content: '▼  '; }
+.finding-rounds > summary:hover { color: var(--text); }
+
+.rounds-container { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.round {
+  background: var(--surf2); border: 1px solid var(--border); border-radius: 4px; padding: 10px 12px;
+}
+.round-header {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 6px; flex-wrap: wrap;
+}
+.round-num     { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); flex-shrink: 0; }
+.round-tools   { font-size: 11px; color: var(--purple); }
+.round-cmds    { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.round-cmd     { font-family: var(--mono); font-size: 11px; color: var(--green);
+                 background: var(--bg); padding: 2px 6px; border-radius: 3px;
+                 border: 1px solid var(--border); word-break: break-all;
+                 white-space: pre-wrap; display: block; }
+.round-verdict { font-size: 11px; font-weight: 700; margin-left: auto; flex-shrink: 0; }
+.round-reasoning {
+  font-size: 12px; color: var(--dim); line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word;
+}
+
+/* ── Executive summary ── */
+.exec-summary    { background: var(--surface); border: 1px solid var(--border2);
+                   border-radius: 6px; padding: 20px 24px; }
+.exec-narrative  { font-size: 12px; color: var(--text); line-height: 1.7;
+                   margin-bottom: 16px; white-space: pre-wrap; word-break: break-word; }
+.exec-techniques { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.exec-chip       { font-size: 11px; font-weight: 700; padding: 3px 10px;
+                   border-radius: 12px; border: 1px solid; letter-spacing: .05em; }
+.chip-verdict    { font-weight: 400; opacity: .8; }
+.exec-grid       { display: grid; gap: 20px; }
+.exec-subtitle   { font-size: 10px; font-weight: 700; text-transform: uppercase;
+                   letter-spacing: .12em; color: var(--dim); margin-bottom: 10px; }
+.action-list     { padding-left: 20px; }
+.action-item     { font-size: 12px; color: var(--text); line-height: 1.6;
+                   margin-bottom: 6px; }
+.ioc-table       { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+.ioc-table th    { text-align: left; font-size: 10px; text-transform: uppercase;
+                   letter-spacing: .1em; color: var(--dim); padding: 4px 12px 4px 0;
+                   border-bottom: 1px solid var(--border); }
+.ioc-table td    { padding: 5px 12px 5px 0; border-bottom: 1px solid var(--border);
+                   vertical-align: top; }
+.ioc-table td:first-child { color: var(--dim); width: 80px; }
+.ioc-table code  { font-family: var(--mono); color: var(--purple); }
+
+/* ── Inconclusive finding cards ── */
+.inconclusive-card   { border-left-color: var(--amber); }
+.inconclusive-badge  { background: rgba(210,153,34,.15); color: var(--amber);
+                       border: 1px solid rgba(210,153,34,.3); }
+
+/* ── Pass 2 tool log ── */
+.log-container { display: flex; flex-direction: column; gap: 6px; }
+.log-entry {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 4px; padding: 8px 12px;
+}
+.log-cmd  { font-size: 12px; color: var(--text); margin-bottom: 4px; }
+.log-num  { color: var(--purple); font-weight: 700; margin-right: 6px; }
+
+/* ── Synthesis (LLM hypothesis) ── */
+.synthesis-header {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+}
+.synthesis-warning {
+  font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--amber); background: rgba(210,153,34,.1);
+  border: 1px solid rgba(210,153,34,.3); border-radius: 3px; padding: 2px 8px;
+}
+.synthesis-box {
+  background: var(--surface); border: 1px solid rgba(210,153,34,.25); border-radius: 6px;
+  padding: 20px 24px; overflow-x: auto;
+}
+.prose { font-family: var(--mono); font-size: 13px; color: var(--dim); line-height: 1.7; }
+.prose h1, .prose h2, .prose h3 {
+  color: var(--text); font-weight: 700; margin: 1.2em 0 0.4em;
+}
+.prose h1 { font-size: 17px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+.prose h2 { font-size: 15px; }
+.prose h3 { font-size: 13px; color: var(--blue); }
+.prose p  { margin: 0.6em 0; }
+.prose strong { color: var(--text); font-weight: 700; }
+.prose em     { color: var(--amber); font-style: normal; }
+.prose hr     { border: none; border-top: 1px solid var(--border); margin: 1em 0; }
+.prose ul, .prose ol { padding-left: 1.5em; margin: 0.4em 0; }
+.prose li     { margin: 0.2em 0; }
+.prose code   { background: var(--surf2); padding: 1px 5px; border-radius: 3px;
+                color: var(--purple); font-size: 12px; }
+.prose pre    { background: var(--surf2); padding: 10px 12px; border-radius: 4px;
+                overflow-x: auto; margin: 0.6em 0; }
+
+/* ── Footer ── */
+.report-footer {
+  margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border);
+  color: var(--dim); font-size: 11px; display: flex; justify-content: space-between;
+}
+
+::-webkit-scrollbar            { width: 6px; height: 6px; background: var(--bg); }
+::-webkit-scrollbar-thumb      { background: var(--border2); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <header class="report-header">
+    <div class="report-title">ADVERSA · Adversarial Signal Learning · Investigation Report</div>
+    <div class="report-host">/mnt/nromanoff</div>
+    <div class="report-meta">
+      <span>2026-05-27 03:07:33 UTC</span>
+      <span>Elapsed: 692s</span>
+      <span>Pass 2: 77 tool calls</span>
+      <span>Triage Agent → Forensic Auditor</span>
+    </div>
+  </header>
+
+  <div class="verdict-banner" style="border-color:#f8514944;background:#f851490d;">
+    <div class="verdict-left">
+      <span class="verdict-icon" style="color:#f85149">⚠</span>
+      <span class="verdict-text" style="color:#f85149">HIGH — Active compromise confirmed (high-value technique verified on disk)</span>
+    </div>
+    <div class="verdict-right">
+      <div class="score-pair">
+        <span style="color:var(--dim)">100</span>
+        <span class="score-arrow">→</span>
+        <span style="color:#f85149">100</span>
+      </div>
+      <div class="score-label">Triage → Audited Score</div>
+    </div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-value" style="color:var(--green)">3</div>
+      <div class="stat-label">Confirmed Techniques</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color:var(--amber)">0</div>
+      <div class="stat-label">Inconclusive</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color:var(--red)">4</div>
+      <div class="stat-label">False Positives Caught</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color:var(--blue)">7</div>
+      <div class="stat-label">Auditor Rounds</div>
+    </div>
+  </div>
+
+  <section class="section exec-summary">
+  <h2 class="section-title">Executive Summary</h2>
+  <p class="exec-narrative">| Step | Time (UTC) | Host | User | Technique | Evidence |
+|------|-----------|------|------|-----------|---------|
+| 1 | 2012-04-03 18:39:35 | WKS-WIN732BITA | SRL-Helpdesk | Initial ADMIN$ probe from 10.3.58.7 | EID 5140, Security.evtx: `\\*\ADMIN$` access failure, src IP 10.3.58.7:4508, LogonId 0x174A094B |
+| 2 | 2012-04-03 19:29:14 | WKS-WIN732BITA | SRL-Helpdesk | Repeated ADMIN$ probe from 10.3.58.7 | EID 5140, Security.evtx: `\\*\ADMIN$` access failure, src IP 10.3.58.7:1425, LogonId 0x17547CFD |
+| 3 | 2012-04-03 21:02:49 | WKS-WIN732BITA | vibranium | Failed NTLM auth — account not yet known to DC | EID 4776 (failure 0xC0000064) + EID 4625, Security.evtx: target `vibranium`, src work</p>
+  <div class="exec-techniques"><span class="exec-chip" style="border-color:var(--green);color:var(--green)">T1003.002 <span class="chip-verdict">CONFIRMED</span></span><span class="exec-chip" style="border-color:var(--green);color:var(--green)">T1055 <span class="chip-verdict">CONFIRMED</span></span><span class="exec-chip" style="border-color:var(--green);color:var(--green)">T1569.002 <span class="chip-verdict">CONFIRMED</span></span></div>
+  <div class="exec-grid">
+    <div>
+      <div class="exec-subtitle">Immediate Containment Actions</div>
+      <ol class="action-list"><li class="action-item">Verify PsExec was not used for lateral movement to adjacent hosts; check for PSEXESVC artifacts on other machines.</li></ol>
+    </div>
+  </div>
+  
+</section>
+  <section class="section">
+  <h2 class="section-title">Confirmed Techniques (3)</h2>
+  <div class="finding-card confirmed-card">
+  <div class="finding-header">
+    <div class="finding-id-block">
+      <span class="finding-badge confirmed-badge">✓ CONFIRMED</span>
+      <span class="finding-tid">T1003.002</span>
+      <span class="finding-name">T1003.002</span>
+    </div>
+    <span class="finding-weight">+35 pts</span>
+  </div>
+  <div class="finding-signals">Triage signals: <span class="signal-list">aad3b435b51404eeaad3b435b51404ee</span></div>
+  <div class="finding-tools">Auditor: <span class="tool-list">3 commands over 1 round(s)</span></div>
+  <div class="evidence-block">
+  <div class="evidence-label">Confirming Evidence (raw tool output)</div>
+  <pre class="evidence-pre">{
+  "memory_image": "/home/sansforensics/cases/nromanoff/win7-32-nromanoff-memory/win7-32-nromanoff-memory-raw.001",
+  "plugin": "windows.hashdump",
+  "row_count": 5,
+  "output": "Volatility 3 Framework 2.27.0\nUser\trid\tlmhash\tnthash\nAdministrator\t500\taad3b435b51404eeaad3b435b51404ee\t31d6cfe0d16ae931b73c59d7e0c089c0\nGuest\t501\taad3b435b51404eeaad3b435b51404ee\t31d6cfe0d16ae931b73c59d7e0c089c0\nSRL-Helpdesk\t1001\taad3b435b51404eeaad3b435b51404ee\t4c3f5e9fe4c8fc2f99d47cbb25d7d193",
+  "truncated": false
+}
+---
+/mnt/nromanoff/Program Files/Common Files/System
+/mnt/nromanoff/ProgramData/Adobe/Acrobat/10.0/Replicate/Security
+/mnt/nromanoff/Users/nromanoff/AppData/Roaming/Adobe/Acrobat/10.0/Security
+/mnt/nromanoff/Windows/assembly/GAC_MSIL/System
+/mnt/nromanoff/Windows/assembly/NativeImages_v2.0.50727_32/System
+/mnt/nromanoff/Windows/assembly/NativeImages_v4.0.30319_32/System
+/mnt/nromanoff/Windows/diagnostics/system
+/mnt/nromanoff/Windows/Microsoft.NET/assembly/GAC_MSIL/System
+/mnt/nromanoff/Windows/Microsoft.NET/Framework/v2.0.50727/ASP.NETWebAdminFiles/Security
+/mnt/nromanoff/Windows/PLA/System
+/mnt/nromanoff/Windows/security
+/mnt/nromanoff/Windows/system
+/mnt/nromanoff/Windows/System32/config/RegBack/SAM
+/mnt/nromanoff/Windows/System32/config/RegBack/SECURITY
+/mnt/nromanoff/Windows/System32/config/RegBack/SYSTEM
+/mnt/nromanoff/Windows/System32/config/SAM
+/mnt/nromanoff/Windows/System32/config/SECURITY
+/mnt/nromanoff/Windows/System32/config/SYSTEM
+/mnt/nromanoff/Windows/System32/Tasks/Microsoft/Windows/PLA/System
+/mnt/nromanoff/Windows/Vss/Writers/System
+
+---</pre>
+</div>
+  <details class="finding-rounds">
+    <summary>Auditor argumentation — 1 round(s), positive evidence round 1</summary>
+    <div class="rounds-container"><div class="round">
+  <div class="round-header">
+    <span class="round-num">Round 1</span>
+    <div class="round-cmds"><code class="round-cmd">run_volatility</code><code class="round-cmd">find /mnt/nromanoff -iname 'SAM' -o -iname 'SYSTEM' -o -iname 'SECURITY' 2&gt;/dev/null | head -20</code><code class="round-cmd">strings /mnt/nromanoff/Windows/System32/config/SAM 2&gt;/dev/null | grep -iE 'aad3b435|lsass|mimikatz|pwdump|fgdump|hashdump|gsecdump|secretsdump|samdump' | head -30</code></div>
+    <span class="round-verdict" style="color:#3fb950">CONFIRMED</span>
+  </div>
+  <div class="round-reasoning">I have sufficient evidence to render a definitive verdict. **Summary of findings:** `windows.hashdump` successfully extracted the SAM database contents directly from memory — returning NTLM hashes for three accounts: **Administrator (RID 500)**, **Guest (RID 501)**, and **SRL-Helpdesk (RID 1001)**. The triage signal `aad3b435b51404eeaad3b435b51404ee` is confirmed as the LM null hash present for all three accounts, and critically, a **non-empty NT hash** (`4c3f5e9fe4c8fc2f99d47cbb25d7d193`) was extracted for the `SRL-Helpdesk` account — a live, crackable credential. The physical SAM hive exists on disk at `/mnt/nromanoff/Windows/System32/config/SAM` (and in RegBack), confirming the hive is intact and was accessible. The strings check on the raw SAM binary returned no tooling strings, meaning the hive itself was not modified or contaminated by a dumping tool writing strings into it — the dump occurred cleanly from memory (LSASS process space), consistent with T1003.002 (SAM credential dumping via in-memory access to the SAM hive through the SYSTEM boot key). The presence of recoverable NTLM hashes in volatile memory from the SAM hive, physically corroborated by the on-disk SAM at `/mnt/nromanoff/Windows/System32/config/SAM`, conclusively confirms this technique was exercised on this host.</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">Round 1 raw tool output</summary>
+  <pre class="raw-output">{
+  "memory_image": "/home/sansforensics/cases/nromanoff/win7-32-nromanoff-memory/win7-32-nromanoff-memory-raw.001",
+  "plugin": "windows.hashdump",
+  "row_count": 5,
+  "output": "Volatility 3 Framework 2.27.0\nUser\trid\tlmhash\tnthash\nAdministrator\t500\taad3b435b51404eeaad3b435b51404ee\t31d6cfe0d16ae931b73c59d7e0c089c0\nGuest\t501\taad3b435b51404eeaad3b435b51404ee\t31d6cfe0d16ae931b73c59d7e0c089c0\nSRL-Helpdesk\t1001\taad3b435b51404eeaad3b435b51404ee\t4c3f5e9fe4c8fc2f99d47cbb25d7d193",
+  "truncated": false
+}
+---
+/mnt/nromanoff/Program Files/Common Files/System
+/mnt/nromanoff/ProgramData/Adobe/Acrobat/10.0/Replicate/Security
+/mnt/nromanoff/Users/nromanoff/AppData/Roaming/Adobe/Acrobat/10.0/Security
+/mnt/nromanoff/Windows/assembly/GAC_MSIL/System
+/mnt/nromanoff/Windows/assembly/NativeImages_v2.0.50727_32/System
+/mnt/nromanoff/Windows/assembly/NativeImages_v4.0.30319_32/System
+/mnt/nromanoff/Windows/diagnostics/system
+/mnt/nromanoff/Windows/Microsoft.NET/assembly/GAC_MSIL/System
+/mnt/nromanoff/Windows/Microsoft.NET/Framework/v2.0.50727/ASP.NETWebAdminFiles/Security
+/mnt/nromanoff/Windows/PLA/System
+/mnt/nromanoff/Windows/security
+/mnt/nromanoff/Windows/system
+/mnt/nromanoff/Windows/System32/config/RegBack/SAM
+/mnt/nromanoff/Windows/System32/config/RegBack/SECURITY
+/mnt/nromanoff/Windows/System32/config/RegBack/SYSTEM
+/mnt/nromanoff/Windows/System32/config/SAM
+/mnt/nromanoff/Windows/System32/config/SECURITY
+/mnt/nromanoff/Windows/System32/config/SYSTEM
+/mnt/nromanoff/Windows/System32/Tasks/Microsoft/Windows/PLA/System
+/mnt/nromanoff/Windows/Vss/Writers/System
+
+---</pre>
+</details>
+</div></div>
+  </details>
+</div>
+<div class="finding-card confirmed-card">
+  <div class="finding-header">
+    <div class="finding-id-block">
+      <span class="finding-badge confirmed-badge">✓ CONFIRMED</span>
+      <span class="finding-tid">T1055</span>
+      <span class="finding-name">Process Injection</span>
+    </div>
+    <span class="finding-weight">+35 pts</span>
+  </div>
+  <div class="finding-signals">Triage signals: <span class="signal-list">page_execute_readwrite, vads</span></div>
+  <div class="finding-tools">Auditor: <span class="tool-list">3 commands over 1 round(s)</span></div>
+  <div class="evidence-block">
+  <div class="evidence-label">Confirming Evidence (raw tool output)</div>
+  <pre class="evidence-pre">Volatility 3 Framework 2.27.0
+
+PID	Process	Start VPN	End VPN	Tag	Protection	CommitCharge	PrivateMemory	File output	Notes	Hexdump	Disasm
+
+880	LogonUI.exe	0x27c0000	0x27c0fff	VadS	PAGE_EXECUTE_READWRITE	1	1	Disabled	N/A	
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ................
+00 00 7c 02 00 00 00 00 00 00 00 00 00 00 00 00 ..|.............
+10 00 7c 02 00 00 00 00 00 00 00 00 00 00 00 00 ..|.............
+20 00 7c 02 00 00 00 00 00 00 00 00 00 00 00 00  .|.............	
+0x27c0000:	add	byte ptr [eax], al
+0x27c0002:	add	byte ptr [eax], al
+0x27c0004:	add	byte ptr [eax], al
+0x27c0006:	add	byte ptr [eax], al
+0x27c0008:	add	byte ptr [eax], al
+0x27c000a:	add	byte ptr [eax], al
+0x27c000c:	add	byte ptr [eax], al
+0x27c000e:	add	byte ptr [eax], al
+0x27c0010:	add	byte ptr [eax], al
+0x27c0012:	jl	0x27c0016
+0x27c0014:	add	byte ptr [eax], al
+0x27c0016:	add	byte ptr [eax], al
+0x27c0018:	add	byte ptr [eax], al
+0x27c001a:	add	byte ptr [eax], al
+0x27c001c:	add	byte ptr [eax], al
+0x27c001e:	add	byte ptr [eax], al
+0x27c0020:	adc	byte ptr [eax], al
+0x27c0022:	jl	0x27c0026
+0x27c0024:	add	byte ptr [eax], al
+0x27c0026:	add	byte ptr [eax], al
+0x27c0028:	add	byte ptr [eax], al
+0x27c002a:	add	byte ptr [eax], al
+0x27c002c:	add	byte ptr [eax], al
+0x27c002e:	add	byte ptr [eax], al
+0x27c0030:	and	byte ptr [eax], al
+0x27c0032:	jl	0x27c0036
+0x27c0034:	add	byte ptr [eax], al
+0x27c0036:	add	byte ptr [eax], al
+0x27c0038:	add	byte ptr [eax], al
+0x27c003a:	add	byte ptr [eax], al
+0x27c003c:	add	byte ptr [eax], al
+0x27c003e:	add	byte ptr [eax], al
+1740	FrameworkServi	0x3150000	0x3150fff	VadS	PAGE_EXECUTE_READWRITE	1	1	Disabled	N/A	
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ................
+00 00 15 03 00 00 00 00 00 00 00 00 00 00 00 00 ................
+10 00 15 03 00 00 00 00 00 00 00 00 00 00 00 00 ................
+20 00 15 03 00 00 00 00 00 00 00 00 00 00 00 00  ...............	
+0x3150000:	add	byte ptr [eax], al
+0x3150002:	add	byte ptr [eax], al
+0x3150004:	add	byte ptr [eax], al
+0x3150006:	ad</pre>
+</div>
+  <details class="finding-rounds">
+    <summary>Auditor argumentation — 1 round(s), positive evidence round 1</summary>
+    <div class="rounds-container"><div class="round">
+  <div class="round-header">
+    <span class="round-num">Round 1</span>
+    <div class="round-cmds"><code class="round-cmd">/opt/volatility3/bin/vol -q -f /home/sansforensics/cases/nromanoff/win7-32-nromanoff-memory/win7-32-nromanoff-memory-raw.001 windows.malfind 2&gt;/dev/null | head -80</code><code class="round-cmd">/opt/volatility3/bin/vol -q -f /home/sansforensics/cases/nromanoff/win7-32-nromanoff-memory/win7-32-nromanoff-memory-raw.001 windows.cmdline 2&gt;/dev/null | head -80</code><code class="round-cmd">find /mnt/nromanoff -iname '*.dll' -newer /mnt/nromanoff/Windows/System32/kernel32.dll 2&gt;/dev/null | head -30</code></div>
+    <span class="round-verdict" style="color:#3fb950">CONFIRMED</span>
+  </div>
+  <div class="round-reasoning">I have sufficient evidence from the first three tool calls to render a verdict. **Assessment of T1055 (Process Injection):** `windows.malfind` produced two confirmed hits with the canonical injection fingerprint — `VadS` tag + `PAGE_EXECUTE_READWRITE` protection — in **PID 880 (`LogonUI.exe`) at VA `0x27c0000`** and **PID 1740 (`FrameworkService.exe`) at VA `0x3150000`**. The `VadS` tag is critical: it indicates a private, anonymous memory allocation (no backing file on disk), which is the hallmark of shellcode or injected PE staging. Both regions are marked `PAGE_EXECUTE_READWRITE`, the triple-permission combination universally abused by injection techniques (VirtualAllocEx/WriteProcessMemory/CreateRemoteThread patterns). The `cmdline` output confirms `LogonUI.exe` was invoked with a low-privilege `/flags:0x0` argument and `FrameworkService.exe` with `/ServiceStart`, making self-injection of these legitimate Windows and McAfee parent processes unlikely — injected code from a third party is the more credible explanation. The disk DLL sweep returned only legitimate vendor files (Adobe AIR, McAfee system DLLs), consistent with the payload being entirely memory-resident (no dropped file). The `VadS`+`PAGE_EXECUTE_READWRITE` combination in two separate, unrelated processes constitutes credible, independent forensic confirmation of T1055 activity on this host.</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">Round 1 raw tool output</summary>
+  <pre class="raw-output">Volatility 3 Framework 2.27.0
+
+PID	Process	Start VPN	End VPN	Tag	Protection	CommitCharge	PrivateMemory	File output	Notes	Hexdump	Disasm
+
+880	LogonUI.exe	0x27c0000	0x27c0fff	VadS	PAGE_EXECUTE_READWRITE	1	1	Disabled	N/A	
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ................
+00 00 7c 02 00 00 00 00 00 00 00 00 00 00 00 00 ..|.............
+10 00 7c 02 00 00 00 00 00 00 00 00 00 00 00 00 ..|.............
+20 00 7c 02 00 00 00 00 00 00 00 00 00 00 00 00  .|.............	
+0x27c0000:	add	byte ptr [eax], al
+0x27c0002:	add	byte ptr [eax], al
+0x27c0004:	add	byte ptr [eax], al
+0x27c0006:	add	byte ptr [eax], al
+0x27c0008:	add	byte ptr [eax], al
+0x27c000a:	add	byte ptr [eax], al
+0x27c000c:	add	byte ptr [eax], al
+0x27c000e:	add	byte ptr [eax], al
+0x27c0010:	add	byte ptr [eax], al
+0x27c0012:	jl	0x27c0016
+0x27c0014:	add	byte ptr [eax], al
+0x27c0016:	add	byte ptr [eax], al
+0x27c0018:	add	byte ptr [eax], al
+0x27c001a:	add	byte ptr [eax], al
+0x27c001c:	add	byte ptr [eax], al
+0x27c001e:	add	byte ptr [eax], al
+0x27c0020:	adc	byte ptr [eax], al
+0x27c0022:	jl	0x27c0026
+0x27c0024:	add	byte ptr [eax], al
+0x27c0026:	add	byte ptr [eax], al
+0x27c0028:	add	byte ptr [eax], al
+0x27c002a:	add	byte ptr [eax], al
+0x27c002c:	add	byte ptr [eax], al
+0x27c002e:	add	byte ptr [eax], al
+0x27c0030:	and	byte ptr [eax], al
+0x27c0032:	jl	0x27c0036
+0x27c0034:	add	byte ptr [eax], al
+0x27c0036:	add	byte ptr [eax], al
+0x27c0038:	add	byte ptr [eax], al
+0x27c003a:	add	byte ptr [eax], al
+0x27c003c:	add	byte ptr [eax], al
+0x27c003e:	add	byte ptr [eax], al
+1740	FrameworkServi	0x3150000	0x3150fff	VadS	PAGE_EXECUTE_READWRITE	1	1	Disabled	N/A	
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ................
+00 00 15 03 00 00 00 00 00 00 00 00 00 00 00 00 ................
+10 00 15 03 00 00 00 00 00 00 00 00 00 00 00 00 ................
+20 00 15 03 00 00 00 00 00 00 00 00 00 00 00 00  ...............	
+0x3150000:	add	byte ptr [eax], al
+0x3150002:	add	byte ptr [eax], al
+0x3150004:	add	byte ptr [eax], al
+0x3150006:	add	byte ptr [eax], al
+0x3150008:	add	byte ptr [eax], al
+0x315000a:	add	byte ptr [eax], al
+0x315000c:	add	byte ptr [eax], al
+0x315000e:	add	byte ptr [eax], al
+0x3150010:	add	byte ptr [eax], al
+0x3150012:	adc	eax, 3
+0x3150017:	add	byte ptr [eax], al
+0x3150019:	add	byte ptr [eax], al
+0x315001b:	add	byte ptr [eax], al
+0x315001d:	add	byte ptr [eax], al
+0x315001f:	add	byte ptr [eax], dl
+0x3150021:	add	byte ptr [3], dl
+0x3150027:	add	byte ptr [eax], al
+0x3150029:	add	byte ptr [eax], al
+0x315002b:	add	byte ptr [eax], al
+0x315002d:	add	byte ptr [eax], al
+0x315002f:	add	byte ptr [eax], ah
+0x3150031:	add	byte ptr [3], dl
+0x3150037:	add	byte ptr [eax], al
+0x3150039:	add	byte ptr [eax], al
+0x315003b:	add	byte ptr [eax], al
+0x315003d:	add	byte ptr [eax], al
+1824	mfevtps.exe	0x1a30000	0x1a6ffff	VadS	PAGE_EXECUTE_READWRITE	1	1	Disabled	N/A	
+48 0e f5 ad e6 8d 00 01 ee ff ee ff 00 00 00 00 H...............
+a8 00 a3 01 a8 00 a3 01 00 00 a3 01 00 00 a3 01 ................
+40 00 00 00 88 05 a3 01 00 00 a7 01 3f 00 00 00 @...........?...
+01 00 00 00 00 00 00 00 f0 0f a3 01 f0 0f a3 01 ................	
+0x1a30000:	dec	eax
+0x1a30001:	push	cs
+0x1a30002:	cmc	
+
+---
+Volatility 3 Framework 2.27.0
+
+PID	Process	Args
+
+4	System	-
+280	smss.exe	\SystemRoot\System32\smss.exe
+412	csrss.exe	%SystemRoot%\system32\csrss.exe ObjectDirectory=\Windows SharedSection=1024,12288,512 Windows=On SubSystemType=Windows ServerDll=basesrv,1 ServerDll=winsrv:UserServerDllInitialization,3 ServerDll=winsrv:ConServerDllInitialization,2 ServerDll=sxssrv,4 ProfileControl=Off MaxRequestThreads=16
+464	wininit.exe	wininit.exe
+472	csrss.exe	%SystemRoot%\system32\csrss.exe ObjectDirectory=\Windows SharedSection=1024,12288,512 Windows=On SubSystemType=Windows ServerDll=basesrv,1 ServerDll=winsrv:UserServerDllInitialization,3 ServerDll=winsrv:ConServerDllInitialization,2 ServerDll=sxssrv,4 ProfileControl=Off MaxRequestThreads=16
+520	winlogon.exe	winlogon.exe
+564	services.exe	C:\Windows\system32\services.exe
+592	lsass.exe	C:\Window</pre>
+</details>
+</div></div>
+  </details>
+</div>
+<div class="finding-card confirmed-card">
+  <div class="finding-header">
+    <div class="finding-id-block">
+      <span class="finding-badge confirmed-badge">✓ CONFIRMED</span>
+      <span class="finding-tid">T1569.002</span>
+      <span class="finding-name">PsExec</span>
+    </div>
+    <span class="finding-weight">+50 pts</span>
+  </div>
+  <div class="finding-signals">Triage signals: <span class="signal-list">psexesvc, psexec</span></div>
+  <div class="finding-tools">Auditor: <span class="tool-list">3 commands over 1 round(s)</span></div>
+  <div class="evidence-block">
+  <div class="evidence-label">Confirming Evidence (raw tool output)</div>
+  <pre class="evidence-pre">File: /mnt/nromanoff/Windows/PSEXESVC.EXE
+  Size: 181064    	Blocks: 360        IO Block: 4096   regular file
+Device: 7,11	Inode: 10613       Links: 1
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2012-04-04 18:52:10.912899700 +0000
+Modify: 2012-04-04 18:52:11.006649700 +0000
+Change: 2012-04-04 18:52:11.006649700 +0000
+ Birth: -
+
+---
+{
+  "memory_image": "/home/sansforensics/cases/nromanoff/win7-32-nromanoff-memory/win7-32-nromanoff-memory-raw.001",
+  "plugin": "windows.svcscan",
+  "row_count": 917,
+  "output": "Volatility 3 Framework 2.27.0\nOffset\tOrder\tPID\tStart\tState\tType\tName\tDisplay\tBinary\tBinary (Registry)\tDll\n0x9be6b8\t388\t1032\tSERVICE_DEMAND_START\tSERVICE_RUNNING\tSERVICE_WIN32_SHARE_PROCESS\tWdiServiceHost\tDiagnostic Service Host\tC:\\Windows\\system32\\svchost.exe -k LocalService\t%SystemRoot%\\System32\\svchost.exe -k LocalService\t%SystemRoot%\\system32\\wdi.dll\n0x9be6b8\t387\tN/A\tSERVICE_BOOT_START\tSERVICE_RUNNING\tSERVICE_KERNEL_DRIVER\tWdf01000\tKernel Mode Driver Frameworks service\t\\Driver\\Wdf01000\tsystem32\\drivers\\Wdf01000.sys\t-\n0x9bc2c0\t386\tN/A\tSERVICE_DEMAND_START\tSERVICE_STOPPED\tSERVICE_KERNEL_DRIVER\tWd\tWd\tN/A\t\\SystemRoot\\system32\\DRIVERS\\wd.sys\t-\n0x9bcc10\t385\tN/A\tSERVICE_DEMAND_START\tSERVICE_STOPPED\tSERVICE_WIN32_SHARE_PROCESS\tWcsPlugInService\tWindows Color System\tN/A\t%SystemRoot%\\system32\\svchost.exe -k wcssvc\t%SystemRoot%\\System32\\WcsPlugInService.dll\n0x9be5e8\t384\t2980\tSERVICE_DEMAND_START\tSERVICE_RUNNING\tSERVICE_WIN32_SHARE_PROCESS\twcncsvc\tWindows Connect Now - Config Registrar\tC:\\Windows\\system32\\svchost.exe -k LocalServiceAndNoImpersonation\t%SystemRoot%\\System32\\svchost.exe -k LocalServiceAndNoImpersonation\t%SystemRoot%\\System32\\wcncsvc.dll\n0x9bc218\t383\tN/A\tSERVICE_DEMAND_START\tSERVICE_STOPPED\tSERVICE_WIN32_SHARE_PROCESS\tWbioSrvc\tWindows Biometric Service\tN/A\t%SystemRoot%\\system32\\svchost.exe -k WbioSvcGroup\t%SystemRoot%\</pre>
+</div>
+  <details class="finding-rounds">
+    <summary>Auditor argumentation — 1 round(s), positive evidence round 1</summary>
+    <div class="rounds-container"><div class="round">
+  <div class="round-header">
+    <span class="round-num">Round 1</span>
+    <div class="round-cmds"><code class="round-cmd">find /mnt/nromanoff -iname 'PSEXESVC.EXE' -o -iname 'psexec.exe' 2&gt;/dev/null | xargs -I{} stat {} 2&gt;/dev/null</code><code class="round-cmd">run_volatility</code><code class="round-cmd">/opt/volatility3/bin/vol -q -f /home/sansforensics/cases/nromanoff/win7-32-nromanoff-memory/win7-32-nromanoff-memory-raw.001 windows.svcscan 2&gt;/dev/null | grep -i 'psexe\|psexesvc'</code></div>
+    <span class="round-verdict" style="color:#3fb950">CONFIRMED</span>
+  </div>
+  <div class="round-reasoning">The evidence is unambiguous across both disk and memory domains. On disk, `/mnt/nromanoff/Windows/PSEXESVC.EXE` (181,064 bytes, MD5 `a283e768fa12ef33087f07b01f82d6dd`) physically exists at inode 10613, with a modify timestamp of **2012-04-04 18:52:11 UTC** — consistent with attacker deployment, not an IR tool. The Triage Agent's EventID 7045 record corroborates service installation at **2012-04-03 21:11:07 UTC** under `LocalSystem`, started on demand, with the binary path `%SystemRoot%\PSEXESVC.EXE`. In memory, `windows.svcscan` at offset `0x9b5f98` independently confirms the **PSEXESVC service (PID 2100) was live and SERVICE_RUNNING** at memory capture time — `SERVICE_WIN32_OWN_PROCESS`, demand-start, binary `C:\Windows\PSEXESVC.EXE`. This is the canonical PsExec service binary dropped by the PsExec client when executing remote commands (T1569.002), corroborated across disk artifact, Windows Event Log (EID 7045), and volatile memory service scan. No IR tool explanation applies — none of the known acquisition/collection tools match PSEXESVC, and the user context (LocalSystem, attacker-style timing) is consistent with adversarial lateral movement.</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">Round 1 raw tool output</summary>
+  <pre class="raw-output">File: /mnt/nromanoff/Windows/PSEXESVC.EXE
+  Size: 181064    	Blocks: 360        IO Block: 4096   regular file
+Device: 7,11	Inode: 10613       Links: 1
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2012-04-04 18:52:10.912899700 +0000
+Modify: 2012-04-04 18:52:11.006649700 +0000
+Change: 2012-04-04 18:52:11.006649700 +0000
+ Birth: -
+
+---
+{
+  "memory_image": "/home/sansforensics/cases/nromanoff/win7-32-nromanoff-memory/win7-32-nromanoff-memory-raw.001",
+  "plugin": "windows.svcscan",
+  "row_count": 917,
+  "output": "Volatility 3 Framework 2.27.0\nOffset\tOrder\tPID\tStart\tState\tType\tName\tDisplay\tBinary\tBinary (Registry)\tDll\n0x9be6b8\t388\t1032\tSERVICE_DEMAND_START\tSERVICE_RUNNING\tSERVICE_WIN32_SHARE_PROCESS\tWdiServiceHost\tDiagnostic Service Host\tC:\\Windows\\system32\\svchost.exe -k LocalService\t%SystemRoot%\\System32\\svchost.exe -k LocalService\t%SystemRoot%\\system32\\wdi.dll\n0x9be6b8\t387\tN/A\tSERVICE_BOOT_START\tSERVICE_RUNNING\tSERVICE_KERNEL_DRIVER\tWdf01000\tKernel Mode Driver Frameworks service\t\\Driver\\Wdf01000\tsystem32\\drivers\\Wdf01000.sys\t-\n0x9bc2c0\t386\tN/A\tSERVICE_DEMAND_START\tSERVICE_STOPPED\tSERVICE_KERNEL_DRIVER\tWd\tWd\tN/A\t\\SystemRoot\\system32\\DRIVERS\\wd.sys\t-\n0x9bcc10\t385\tN/A\tSERVICE_DEMAND_START\tSERVICE_STOPPED\tSERVICE_WIN32_SHARE_PROCESS\tWcsPlugInService\tWindows Color System\tN/A\t%SystemRoot%\\system32\\svchost.exe -k wcssvc\t%SystemRoot%\\System32\\WcsPlugInService.dll\n0x9be5e8\t384\t2980\tSERVICE_DEMAND_START\tSERVICE_RUNNING\tSERVICE_WIN32_SHARE_PROCESS\twcncsvc\tWindows Connect Now - Config Registrar\tC:\\Windows\\system32\\svchost.exe -k LocalServiceAndNoImpersonation\t%SystemRoot%\\System32\\svchost.exe -k LocalServiceAndNoImpersonation\t%SystemRoot%\\System32\\wcncsvc.dll\n0x9bc218\t383\tN/A\tSERVICE_DEMAND_START\tSERVICE_STOPPED\tSERVICE_WIN32_SHARE_PROCESS\tWbioSrvc\tWindows Biometric Service\tN/A\t%SystemRoot%\\system32\\svchost.exe -k WbioSvcGroup\t%SystemRoot%\\System32\\wbiosrvc.dll\n0x9bc170\t382\tN/A\tSERVICE_DEMAND_START\tSERVICE_STOPPED\tSERVICE_WIN32_OWN_PROCESS\twbengine\tBlock Level Backup Engine Service\tN/A\t\"%systemroot%\\system32\\wbengine.exe\"\t-\n0x9bc0c8\t381\tN/A\tSERVICE_DEMAND_START\tSERVICE_STOPPED\tSERVICE_WIN32_OWN_PROCESS\tWatAdminSvc\tWindows Activation Technologies Service\tN/A\t%SystemRoot%\\system32\\Wat\\WatAdminSvc.exe\t-\n0x9b8948\t380\tN/A\tSERVICE_SYSTEM_START\tSERVICE_RUNNING\tSERVICE_KERNEL_DRIVER\tWanarpv6\tRemote Access IPv6 ARP Driver\t\\Driver\\Wanarpv6\tsystem32\\DRIVERS\\wanarp.sys\t-\n0x9bc020\t379\tN/A\tSERVICE_DEMAND_START\tSERVICE_STOPPED\tSERVICE_KERNEL_DRIVER\tWANARP\tRemote Access IP ARP Driver\tN/A\tsystem32\\DRIVERS\\wanarp.sys\t-\n0x9bbf78\t378\tN/A\tSERVICE_DEMAND_START\tSERVICE_STOPPED\tSERVICE_KERNEL_DRIVER\tWacomPen\tWacom Serial Pen HID Driver\tN/A\t\\SystemRoot\\system32\\DRIVERS\\wacompen.sys\t-\n0x9bbed0\t377\t1032\tSERVICE_DEMAND_START\tSERVICE_RUNNING\tSERVICE_WIN32_SHARE_PROCESS\tW32Time\tWindows Time\tC:\\Windows\\system32\\svchost.exe -k LocalService\t%SystemRoot%\\system32\\svchost.exe -k LocalService\t%systemroot%\\system32\\w32time.dll\n0x9bbe28\t376\tN/A\tSERVICE_DEMAND_START\tSERVICE_STOPPED\tSERVICE_KERNEL_DRIVER\tvwifibus\tVirtual WiFi Bus Driver\tN/A\t\\SystemRoot\\System32\\drivers\\vwifibus.sys\t-\n0x9bbd80\t375\tN/A\tSERVICE_DEMAND_START\tSERVICE_STOPPED\tSERVICE_WIN32_OWN_PROCESS\tVSS\tVolume Shadow Copy\tN/A\t%systemroot%\\system32\\vssvc.exe\t-\n0x9bcb70\t374\tN/A\tSERVICE_DEMAND_START\tSERVICE_STOPPED\tSERVICE_KERNEL_DRIVER\tvsmraid\tvsmraid\tN/A\t\\SystemRoot\\system32\\DRIVERS\\vsmraid.sys\t-\n0x9bbcd8\t373\tN/A\tSERVICE_BOOT_START\tSERVICE_RUNNING\tSERVICE_KERNEL_DRIVER\tvolsnap\tStorage volumes\t\\Driver\\volsnap\tsystem32\\drivers\\volsnap.sys\t-\n0x9bbc30\t372\tN/A\tSERVICE_BOOT_START\tSERVICE_RUNNING\tSERVICE_KERNEL_DRIVER\tvolmgrx\tDynamic Volume Manager\t\\Driver\\volmgrx\tSystem32\\drivers\\volmgrx.sys\t-\n0x9bbb88\t371\tN/A\tSERVIC</pre>
+</details>
+</div></div>
+  </details>
+</div>
+</section>
+  
+  <section class="section">
+  <h2 class="section-title">Refuted — False Positives Caught (4)</h2>
+  <div class="finding-card refuted-card">
+  <div class="finding-header">
+    <div class="finding-id-block">
+      <span class="finding-badge refuted-badge">✗ REFUTED</span>
+      <span class="finding-tid">T1071.001</span>
+      <span class="finding-name">C2: Application Layer Protocol (Web)</span>
+    </div>
+    <span class="finding-weight refuted-weight">−35 pts</span>
+  </div>
+  <div class="finding-signals">Triage signals: <span class="signal-list">established</span></div>
+  <div class="finding-tools">Auditor: <span class="tool-list">3 commands over 1 round(s)</span></div>
+  
+  <details class="finding-rounds">
+    <summary>Auditor argumentation — 1 round(s), contradiction round 1</summary>
+    <div class="rounds-container"><div class="round">
+  <div class="round-header">
+    <span class="round-num">Round 1</span>
+    <div class="round-cmds"><code class="round-cmd">/opt/volatility3/bin/vol -q -f /home/sansforensics/cases/nromanoff/win7-32-nromanoff-memory/win7-32-nromanoff-memory-raw.001 windows.netscan 2&gt;/dev/null</code><code class="round-cmd">/opt/volatility3/bin/vol -q -f /home/sansforensics/cases/nromanoff/win7-32-nromanoff-memory/win7-32-nromanoff-memory-raw.001 windows.cmdline 2&gt;/dev/null</code><code class="round-cmd">/opt/volatility3/bin/vol -q -f /home/sansforensics/cases/nromanoff/win7-32-nromanoff-memory/win7-32-nromanoff-memory-raw.001 windows.netscan 2&gt;/dev/null | grep -iE "ESTABLISHED|CLOSE_WAIT|TIME_WAIT|SYN_SENT"</code></div>
+    <span class="round-verdict" style="color:#f85149">REFUTED</span>
+  </div>
+  <div class="round-reasoning">Based on what I've gathered, let me render my verdict from the evidence in hand. From the full `windows.netscan` output, all visible TCP connections are in **LISTENING** state only — System (port 445), FrameworkService.exe (ports 8081/8082), services.exe (port 49186), svchost instances (ports 3389, 135, 49152, 49153, 123), and wininit.exe. **Not a single ESTABLISHED outbound connection to a foreign IP address is present** in the netscan results. The triage signal was simply "established," but the raw Volatility `windows.netscan` output shows no active established connections to any external host over HTTP (port 80/443) or any other application-layer web protocol. The `windows.cmdline` output shows entirely legitimate Windows system processes and McAfee AV/firewall services — no suspicious injected processes, no browsers or network tools executing from anomalous paths, and no command lines referencing C2 infrastructure. The FrameworkService.exe listening on ports 8081/8082 is McAfee's legitimate Common Framework service, a known AV management component, not attacker C2. Without a confirmed ESTABLISHED outbound connection to a suspicious foreign IP, and with no anomalous processes or command-line arguments pointing to web-based C2 activity, the triage signal of "established" has no supporting physical artifact in memory.</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">Round 1 raw tool output</summary>
+  <pre class="raw-output">Volatility 3 Framework 2.27.0
+
+Offset	Proto	LocalAddr	LocalPort	ForeignAddr	ForeignPort	State	PID	Owner	Created
+
+0x4fb90e0	UDPv4	0.0.0.0	0	*	0		456	mfefire.exe	2012-04-04 11:48:37.000000 UTC
+0x4fb90e0	UDPv6	::	0	*	0		456	mfefire.exe	2012-04-04 11:48:37.000000 UTC
+0x7d8b0b50	TCPv4	0.0.0.0	445	0.0.0.0	0	LISTENING	4	System	N/A
+0x7d8b0b50	TCPv6	::	445	::	0	LISTENING	4	System	N/A
+0x7d8df2a8	TCPv4	0.0.0.0	8081	0.0.0.0	0	LISTENING	1740	FrameworkServi	N/A
+0x7d8e1b20	UDPv4	0.0.0.0	8082	*	0		1740	FrameworkServi	2012-04-04 11:48:26.000000 UTC
+0x7d8e1ea8	TCPv4	0.0.0.0	8081	0.0.0.0	0	LISTENING	1740	FrameworkServi	N/A
+0x7d8e1ea8	TCPv6	::	8081	::	0	LISTENING	1740	FrameworkServi	N/A
+0x7d8e2d38	UDPv4	0.0.0.0	8082	*	0		1740	FrameworkServi	2012-04-04 11:48:26.000000 UTC
+0x7d8e2d38	UDPv6	::	8082	*	0		1740	FrameworkServi	2012-04-04 11:48:26.000000 UTC
+0x7d931120	UDPv4	0.0.0.0	0	*	0		456	mfefire.exe	2012-04-04 11:48:37.000000 UTC
+0x7d93ca70	TCPv4	0.0.0.0	49186	0.0.0.0	0	LISTENING	564	services.exe	N/A
+0x7d93ca70	TCPv6	::	49186	::	0	LISTENING	564	services.exe	N/A
+0x7d946818	UDPv4	0.0.0.0	0	*	0		1032	svchost.exe	2012-04-04 11:48:38.000000 UTC
+0x7d947330	UDPv4	0.0.0.0	0	*	0		1032	svchost.exe	2012-04-04 11:48:38.000000 UTC
+0x7d947330	UDPv6	::	0	*	0		1032	svchost.exe	2012-04-04 11:48:38.000000 UTC
+0x7d969ec0	TCPv4	0.0.0.0	3389	0.0.0.0	0	LISTENING	1184	svchost.exe	N/A
+0x7d96e308	TCPv4	0.0.0.0	3389	0.0.0.0	0	LISTENING	1184	svchost.exe	N/A
+0x7d96e308	TCPv6	::	3389	::	0	LISTENING	1184	svchost.exe	N/A
+0x7d984e20	UDPv4	0.0.0.0	123	*	0		1032	svchost.exe	2012-04-04 11:48:39.000000 UTC
+0x7d985bb0	UDPv4	0.0.0.0	123	*	0		1032	svchost.exe	2012-04-04 11:48:39.000000 UTC
+0x7d985bb0	UDPv6	::	123	*	0		1032	svchost.exe	2012-04-04 11:48:39.000000 UTC
+0x7da02898	TCPv4	0.0.0.0	49152	0.0.0.0	0	LISTENING	464	wininit.exe	N/A
+0x7da03298	TCPv4	0.0.0.0	135	0.0.0.0	0	LISTENING	780	svchost.exe	N/A
+0x7da03298	TCPv6	::	135	::	0	LISTENING	780	svchost.exe	N/A
+0x7da223e8	TCPv4	0.0.0.0	49153	0.0.0.0	0	LISTENING	820	svchost.exe	N/A
+0x7da25648	TCPv4	0.0.0.0	49153	0.0.0.0	0	LISTENING	820	svchost.exe	N/A
+0x7da25648	TCPv6	::	49153	::	0	LISTENING	820	svchost.exe	N/A
+0x7da96700	TCPv4	0.0.0.0	49154	0.0.0.0	0	LISTENING	592	lsass.exe	N/A
+0x7da96700	TCPv6	::	49154	::	0	LISTENING	592	lsass.exe	N/A
+0x7da96de8	TCPv4	0.0.0.0	49154	0.0.0.0	0	LISTENING	592	lsass.exe	N/A
+0x7dab56c0	UDPv4	0.0.0.0	5355	*	0		1184	svchost.exe	2012-04-04 11:48:00.000000 UTC
+0x7dab6208	UDPv4	0.0.0.0	0	*	0		1184	svchost.exe	2012-04-04 11:48:00.000000 UTC
+0x7dab6208	UDPv6	::	0	*	0		1184	svchost.exe	2012-04-04 11:48:00.000000 UTC
+0x7dad06f0	TCPv4	0.0.0.0	49155	0.0.0.0	0	LISTENING	944	svchost.exe	N/A
+0x7dad2430	TCPv4	0.0.0.0	49155	0.0.0.0	0	LISTENING	944	svchost.exe	N/A
+0x7dad2430	TCPv6	::	49155	::	0	LISTENING	944	svchost.exe	N/A
+0x7daf8960	UDPv4	0.0.0.0	0	*	0		592	lsass.exe	2012-04-04 11:48:04.000000 UTC
+0x7daf8960	UDPv6	::	0	*	0		592	lsass.exe	2012-04-04 11:48:04.000000 UTC
+0x7db136a0	UDPv4	127.0.0.1	55829	*	0		592	lsass.exe	2012-04-04 11:48:04.000000 UTC
+0x7db17770	UDPv4	127.0.0.1	55827	*	0		1184	svchost.exe	2012-04-04 11:48:04.000000 UTC
+0x7db24ac8	UDPv4	0.0.0.0	0	*	0		592	lsass.exe	2012-04-04 11:48:04.000000 UTC
+0x7db24ac8	UDPv6	::	0	*	0		592	lsass.exe	2012-04-04 11:48:04.000000 UTC
+0x7db2a008	UDPv4	0.0.0.0	0	*	0		592	lsass.exe	2012-04-04 11:48:04.000000 UTC
+0x7db2a008	UDPv6	::	0	*	0		592	lsass.exe	2012-04-04 11:48:04.000000 UTC
+0x7db2af50	UDPv4	0.0.0.0	0	*	0		592	lsass.exe	2012-04-04 11:48:04.000000 UTC
+0x7db31320	UDPv4	0.0.0.0	0	*	0		592	lsass.exe	2012-04-04 11:48:04.000000 UTC
+0x7db36008	UDPv4	127.0.0.1	55832	*	0		944	svchost.exe	2012-04-04 11:48:04.000000 UTC
+0x7db4cc10	TCPv4	-	62342	-	80	CLOSED	1184	svchost.exe	-
+0x7ddf35a0	TCPv4	0.0.0.0	135	0.0.0.0	0	LISTENING	780	svchost.exe	N/A
+0x7ddfb440	TCPv4	0.0.0.0	49152	0.0.0.0	0	LISTENING	464	wininit.exe	N/A
+0x7ddfb440	TCPv6	::	49152	::	0	LISTENING	464	wininit.exe	N/A
+0x7ec1f2b8	UDPv4	10.3.58.5	138	*	0		4	System	2012-04-04 11:47:39.000000 UTC
+0x7eccb7c8	UDPv4	10.3.58.5	137	*	0		4</pre>
+</details>
+</div></div>
+  </details>
+</div>
+<div class="finding-card refuted-card">
+  <div class="finding-header">
+    <div class="finding-id-block">
+      <span class="finding-badge refuted-badge">✗ REFUTED</span>
+      <span class="finding-tid">T1134</span>
+      <span class="finding-name">T1134</span>
+    </div>
+    <span class="finding-weight refuted-weight">−35 pts</span>
+  </div>
+  <div class="finding-signals">Triage signals: <span class="signal-list">sedebugprivilege, seimpersonateprivilege</span></div>
+  <div class="finding-tools">Auditor: <span class="tool-list">3 commands over 1 round(s)</span></div>
+  
+  <details class="finding-rounds">
+    <summary>Auditor argumentation — 1 round(s), contradiction round 1</summary>
+    <div class="rounds-container"><div class="round">
+  <div class="round-header">
+    <span class="round-num">Round 1</span>
+    <div class="round-cmds"><code class="round-cmd">/opt/volatility3/bin/vol -q -f /home/sansforensics/cases/nromanoff/win7-32-nromanoff-memory/win7-32-nromanoff-memory-raw.001 windows.privileges.Privs 2&gt;/dev/null | grep -i -E 'SeDebug|SeImpersonate|SeAssignPrimary|SeTcb|SeCreateToken' | head -40</code><code class="round-cmd">grep -i -E 'sedebug|seimpersonate|4672|token' /tmp/evtx_out/security.csv | grep -v 'WKS-WIN732BITA\$' | head -40</code><code class="round-cmd">/opt/volatility3/bin/vol -q -f /home/sansforensics/cases/nromanoff/win7-32-nromanoff-memory/win7-32-nromanoff-memory-raw.001 windows.privileges.Privs 2&gt;/dev/null | grep -E 'Enabled' | grep -v -E '^(4|280|412|464|472|488|556|604|636|668|708|728|744|764|768|796|820|840|916|948|984|996|1028|1048|1056|1064|1088|1180|1216)\s' | head -60</code></div>
+    <span class="round-verdict" style="color:#f85149">REFUTED</span>
+  </div>
+  <div class="round-reasoning">Based on the evidence gathered, the privilege signals attributed to T1134 do not hold up as evidence of token manipulation. All occurrences of `SeDebugPrivilege` and `SeImpersonatePrivilege` in the Volatility `windows.privileges.Privs` output are associated exclusively with expected operating-system processes: `System` (PID 4), `smss.exe`, `csrss.exe`, `wininit.exe`, `winlogon.exe`, and `services.exe`. These privileges are *Present,Enabled,Default* on those processes as a matter of normal Windows design — they are not indicators of manipulation. The EventID 4672 entries in the Security log similarly record `NT AUTHORITY\SYSTEM` and the machine account (`WKS-WIN732BITA$`) receiving their standard administrative privilege sets at logon — routine OS behavior. No user-land attacker process (e.g., a shell, injected binary, or credential-dumping tool) appears in memory with `SeDebugPrivilege` or `SeImpersonatePrivilege` **enabled** outside of a legitimate OS context. The triage signal was generated by matching privilege *names* against known-abused privilege strings, but the physical artifacts show only expected system-process privilege assignments with no corroborating token-impersonation or injection artifact anywhere on the host. This is a genuine false positive driven by string-matching OS privilege names without contextual process attribution.</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">Round 1 raw tool output</summary>
+  <pre class="raw-output">4	System	2	SeCreateTokenPrivilege	Present	Create a token object
+4	System	3	SeAssignPrimaryTokenPrivilege	Present	Replace a process-level token
+4	System	7	SeTcbPrivilege	Present,Enabled,Default	Act as part of the operating system
+4	System	20	SeDebugPrivilege	Present,Enabled,Default	Debug programs
+4	System	29	SeImpersonatePrivilege	Present,Enabled,Default	Impersonate a client after authentication
+280	smss.exe	2	SeCreateTokenPrivilege	Present	Create a token object
+280	smss.exe	3	SeAssignPrimaryTokenPrivilege	Present	Replace a process-level token
+280	smss.exe	7	SeTcbPrivilege	Present,Enabled,Default	Act as part of the operating system
+280	smss.exe	20	SeDebugPrivilege	Present,Enabled,Default	Debug programs
+280	smss.exe	29	SeImpersonatePrivilege	Present,Enabled,Default	Impersonate a client after authentication
+412	csrss.exe	2	SeCreateTokenPrivilege	Present	Create a token object
+412	csrss.exe	3	SeAssignPrimaryTokenPrivilege	Present	Replace a process-level token
+412	csrss.exe	7	SeTcbPrivilege	Present,Enabled,Default	Act as part of the operating system
+412	csrss.exe	20	SeDebugPrivilege	Present,Enabled,Default	Debug programs
+412	csrss.exe	29	SeImpersonatePrivilege	Present,Enabled,Default	Impersonate a client after authentication
+464	wininit.exe	2	SeCreateTokenPrivilege		Create a token object
+464	wininit.exe	3	SeAssignPrimaryTokenPrivilege	Present	Replace a process-level token
+464	wininit.exe	7	SeTcbPrivilege	Present,Enabled,Default	Act as part of the operating system
+464	wininit.exe	20	SeDebugPrivilege	Present,Enabled,Default	Debug programs
+464	wininit.exe	29	SeImpersonatePrivilege	Present,Enabled,Default	Impersonate a client after authentication
+472	csrss.exe	2	SeCreateTokenPrivilege	Present	Create a token object
+472	csrss.exe	3	SeAssignPrimaryTokenPrivilege	Present	Replace a process-level token
+472	csrss.exe	7	SeTcbPrivilege	Present,Enabled,Default	Act as part of the operating system
+472	csrss.exe	20	SeDebugPrivilege	Present,Enabled,Default	Debug programs
+472	csrss.exe	29	SeImpersonatePrivilege	Present,Enabled,Default	Impersonate a client after authentication
+520	winlogon.exe	2	SeCreateTokenPrivilege		Create a token object
+520	winlogon.exe	3	SeAssignPrimaryTokenPrivilege	Present	Replace a process-level token
+520	winlogon.exe	7	SeTcbPrivilege	Present,Enabled,Default	Act as part of the operating system
+520	winlogon.exe	20	SeDebugPrivilege	Present,Enabled,Default	Debug programs
+520	winlogon.exe	29	SeImpersonatePrivilege	Present,Enabled,Default	Impersonate a client after authentication
+564	services.exe	2	SeCreateTokenPrivilege		Create a token object
+564	services.exe	3	SeAssignPrimaryTokenPrivilege	Present	Replace a process-level token
+564	services.exe	7	SeTcbPrivilege	Present,Enabled,Default	Act as part of the operating system
+564	services.exe	20	SeDebugPrivilege	Present,Enabled,Default	Debug programs
+564	services.exe	29	SeImpersonatePrivilege	Present,Enabled,Default	Impersonate a client after authentication
+592	lsass.exe	2	SeCreateTokenPrivilege	Present,Enabled	Create a token object
+592	lsass.exe	3	SeAssignPrimaryTokenPrivilege	Present	Replace a process-level token
+592	lsass.exe	7	SeTcbPrivilege	Present,Enabled,Default	Act as part of the operating system
+592	lsass.exe	20	SeDebugPrivilege	Present,Enabled,Default	Debug programs
+592	lsass.exe	29	SeImpersonatePrivilege	Present,Enabled,Default	Impersonate a client after authentication
+
+---
+523690,523690,2012-03-29 19:08:18.6910630,4672,LogAlways,Microsoft-Windows-Security-Auditing,Security,488,3220,WKS-WIN732BITA.shieldbase.local,2,,Administrative logon,NT AUTHORITY\SYSTEM (S-1-5-18),,"PrivilegeList: SeAssignPrimaryTokenPrivilege, SeTcbPrivilege, SeSecurityPrivilege, SeTakeOwnershipPrivilege, SeLoadDriverPrivilege, SeBackupPrivilege, SeRestorePrivilege, SeDebugPrivilege, SeAuditPrivilege, SeSystemEnvironmentPrivilege, SeImpersonatePrivilege",LogonId: 0x3E7,,,,,,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit success,0,"{""EventData"":{""Data"":[{""@Name"":""SubjectUserSi</pre>
+</details>
+</div></div>
+  </details>
+</div>
+<div class="finding-card refuted-card">
+  <div class="finding-header">
+    <div class="finding-id-block">
+      <span class="finding-badge refuted-badge">✗ REFUTED</span>
+      <span class="finding-tid">T1547.001</span>
+      <span class="finding-name">Registry Run Key</span>
+    </div>
+    <span class="finding-weight refuted-weight">−50 pts</span>
+  </div>
+  <div class="finding-signals">Triage signals: <span class="signal-list">dllhost\svchost, currentversion\run</span></div>
+  <div class="finding-tools">Auditor: <span class="tool-list">3 commands over 1 round(s)</span></div>
+  
+  <details class="finding-rounds">
+    <summary>Auditor argumentation — 1 round(s), contradiction round 1</summary>
+    <div class="rounds-container"><div class="round">
+  <div class="round-header">
+    <span class="round-num">Round 1</span>
+    <div class="round-cmds"><code class="round-cmd">find /mnt/nromanoff -ipath '*/ntuser.dat' 2&gt;/dev/null</code><code class="round-cmd">run_volatility</code><code class="round-cmd">for hive in /mnt/nromanoff/Users/nromanoff/NTUSER.DAT /mnt/nromanoff/Users/rsydow/NTUSER.DAT /mnt/nromanoff/Users/Tdungan/NTUSER.DAT /mnt/nromanoff/Users/vibranium/NTUSER.DAT /mnt/nromanoff/Users/SRL-Helpdesk/NTUSER.DAT; do echo "=== $hive ==="; strings "$hive" 2&gt;/dev/null | grep -iE '(currentversion.{0,10}run|dllhost|svchost)' | head -20; done</code></div>
+    <span class="round-verdict" style="color:#f85149">REFUTED</span>
+  </div>
+  <div class="round-reasoning">I have enough data to render a verdict. Let me assess what was found: **Disk artifact:** Seven NTUSER.DAT hive files were located across multiple user profiles (`nromanoff`, `rsydow`, `Tdungan`, `vibranium`, `SRL-Helpdesk`, `Default`, `Public`). **Memory artifact (registry printkey):** The `windows.registry.printkey` plugin enumerated every loaded hive's `Software\Microsoft\Windows\CurrentVersion\Run` key across the full memory image. The results show: - `NetworkService` NTUSER.DAT → `Sidebar` → `Sidebar.exe /autoRun` (stock Windows default, 2009-07-14) - `LocalService` NTUSER.DAT → `Sidebar` → `Sidebar.exe /autoRun` (stock Windows default, 2009-07-14) - `vibranium` NTUSER.DAT → `Sidebar` → `Sidebar.exe /autoRun` (2012-04-03, legitimate) - All other hives (SYSTEM, HARDWARE, SECURITY, SAM, SOFTWARE machine hive) → **empty/no values** **Critically:** The triage signals `dllhost\svchost` and `currentversion\run` appear together as a suspicious pairing — implying a masquerading process (dllhost or svchost) set as a Run key value. The memory-resident registry scan found **zero entries** matching either `dllhost` or `svchost` under any Run key across all loaded hives. The only Run key values present are the stock `Sidebar.exe /autoRun` entries, dated to Windows install time (2009) or a benign user profile (2012). The SOFTWARE machine hive also showed no machine-wide Run key entries in memory. Without a second tool call confirming a masquerading binary in the hive strings, and with the memory registry scan returning clean results across all user and system hives, there is no physical artifact corroborating a `dllhost`- or `svchost`-named persistence entry under any Run key on this host.</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">Round 1 raw tool output</summary>
+  <pre class="raw-output">/mnt/nromanoff/Users/Default/NTUSER.DAT
+/mnt/nromanoff/Users/nromanoff/NTUSER.DAT
+/mnt/nromanoff/Users/Public/NTUSER.DAT
+/mnt/nromanoff/Users/rsydow/NTUSER.DAT
+/mnt/nromanoff/Users/SRL-Helpdesk/NTUSER.DAT
+/mnt/nromanoff/Users/Tdungan/NTUSER.DAT
+/mnt/nromanoff/Users/vibranium/NTUSER.DAT
+/mnt/nromanoff/Windows/ServiceProfiles/LocalService/NTUSER.DAT
+/mnt/nromanoff/Windows/ServiceProfiles/NetworkService/NTUSER.DAT
+/mnt/nromanoff/Windows/System32/config/systemprofile/ntuser.dat
+
+---
+{
+  "memory_image": "/home/sansforensics/cases/nromanoff/win7-32-nromanoff-memory/win7-32-nromanoff-memory-raw.001",
+  "plugin": "windows.registry.printkey",
+  "row_count": 14,
+  "output": "Volatility 3 Framework 2.27.0\nLast Write Time\tHive Offset\tType\tKey\tName\tData\tVolatile\n-\t0x8ac10148\tKey\t[NONAME]\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\t-\t-\t-\n-\t0x8ac1c008\tKey\t\\REGISTRY\\MACHINE\\SYSTEM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\t-\t-\t-\n-\t0x8ac3f008\tKey\t\\REGISTRY\\MACHINE\\HARDWARE\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\t-\t-\t-\n-\t0x905e0008\tKey\t\\SystemRoot\\System32\\Config\\SECURITY\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\t-\t-\t-\n-\t0x905e3008\tKey\t\\SystemRoot\\System32\\Config\\SAM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\t-\t-\t-\n-\t0x905e39c8\tKey\t\\SystemRoot\\System32\\Config\\SOFTWARE\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\t-\t-\t-\n-\t0x90890008\tKey\t\\Device\\HarddiskVolume1\\Boot\\BCD\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\t-\t-\t-\n2009-07-14 04:34:14.000000 UTC\t0x9a0df008\tREG_EXPAND_SZ\t\\??\\C:\\Windows\\ServiceProfiles\\NetworkService\\NTUSER.DAT\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\tSidebar\t%ProgramFiles%\\Windows Sidebar\\Sidebar.exe /autoRun\tFalse\n2009-07-14 04:34:14.000000 UTC\t0x9a0f85d8\tREG_EXPAND_SZ\t\\??\\C:\\Windows\\ServiceProfiles\\LocalService\\NTUSER.DAT\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\tSidebar\t%ProgramFiles%\\Windows Sidebar\\Sidebar.exe /autoRun\tFalse\n-\t0x9eaec4d0\tKey\t\\??\\C:\\System Volume Information\\Syscache.hve\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\t-\t-\t-\n2012-04-03 21:19:54.000000 UTC\t0xa10039c8\tREG_EXPAND_SZ\t\\??\\C:\\Users\\vibranium\\ntuser.dat\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\tSidebar\t%ProgramFiles%\\Windows Sidebar\\Sidebar.exe /autoRun\tFalse\n-\t0xa189f9c8\tKey\t\\??\\C:\\Users\\vibranium\\AppData\\Local\\Microsoft\\Windows\\UsrClass.dat\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\t-\t-\t-",
+  "truncated": false
+}
+---
+ERROR: Command blocked — binary 'for' not in forensic allowlist</pre>
+</details>
+</div></div>
+  </details>
+</div>
+<div class="finding-card refuted-card">
+  <div class="finding-header">
+    <div class="finding-id-block">
+      <span class="finding-badge refuted-badge">✗ REFUTED</span>
+      <span class="finding-tid">T1574</span>
+      <span class="finding-name">T1574</span>
+    </div>
+    <span class="finding-weight refuted-weight">−35 pts</span>
+  </div>
+  <div class="finding-signals">Triage signals: <span class="signal-list">false	</span></div>
+  <div class="finding-tools">Auditor: <span class="tool-list">3 commands over 1 round(s)</span></div>
+  
+  <details class="finding-rounds">
+    <summary>Auditor argumentation — 1 round(s), contradiction round 1</summary>
+    <div class="rounds-container"><div class="round">
+  <div class="round-header">
+    <span class="round-num">Round 1</span>
+    <div class="round-cmds"><code class="round-cmd">/opt/volatility3/bin/vol -q -f /home/sansforensics/cases/nromanoff/win7-32-nromanoff-memory/win7-32-nromanoff-memory-raw.001 windows.malfind 2&gt;/dev/null | head -80</code><code class="round-cmd">/opt/volatility3/bin/vol -q -f /home/sansforensics/cases/nromanoff/win7-32-nromanoff-memory/win7-32-nromanoff-memory-raw.001 windows.cmdline 2&gt;/dev/null</code><code class="round-cmd">find /mnt/nromanoff -iname "*.dll" -newer /mnt/nromanoff/Windows/System32/kernel32.dll 2&gt;/dev/null | grep -v "WinSxS\|assembly\|Installer" | head -40</code></div>
+    <span class="round-verdict" style="color:#f85149">REFUTED</span>
+  </div>
+  <div class="round-reasoning">Based on the evidence gathered, here is my assessment: The triage signal for T1574 (Hijack Execution Flow) was tagged "false\t" — a clearly malformed/empty signal string suggesting the detection was a null result or parsing artifact. Reviewing the `windows.malfind` output, I found only two PAGE_EXECUTE_READWRITE regions: one in `LogonUI.exe` and one in `FrameworkService.exe` (a McAfee process). Both contain zeroed-out memory with no shellcode disassembly pattern beyond null `add [eax],al` sequences — consistent with legitimate memory-mapped structures, not injected or hijacked code. The `windows.cmdline` output shows a clean, standard Windows 7 process tree with all executables loading from canonical paths (`C:\Windows\system32\`, known AV vendor paths). There is no evidence of DLL side-loading, phantom DLLs in non-standard search-order locations, or process command lines indicative of hijacked execution flow. The original triage signal value "false\t" is itself diagnostic — this appears to be a detection artifact producing a null/boolean-false result rather than a genuine IOC match.</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">Round 1 raw tool output</summary>
+  <pre class="raw-output">Volatility 3 Framework 2.27.0
+
+PID	Process	Start VPN	End VPN	Tag	Protection	CommitCharge	PrivateMemory	File output	Notes	Hexdump	Disasm
+
+880	LogonUI.exe	0x27c0000	0x27c0fff	VadS	PAGE_EXECUTE_READWRITE	1	1	Disabled	N/A	
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ................
+00 00 7c 02 00 00 00 00 00 00 00 00 00 00 00 00 ..|.............
+10 00 7c 02 00 00 00 00 00 00 00 00 00 00 00 00 ..|.............
+20 00 7c 02 00 00 00 00 00 00 00 00 00 00 00 00  .|.............	
+0x27c0000:	add	byte ptr [eax], al
+0x27c0002:	add	byte ptr [eax], al
+0x27c0004:	add	byte ptr [eax], al
+0x27c0006:	add	byte ptr [eax], al
+0x27c0008:	add	byte ptr [eax], al
+0x27c000a:	add	byte ptr [eax], al
+0x27c000c:	add	byte ptr [eax], al
+0x27c000e:	add	byte ptr [eax], al
+0x27c0010:	add	byte ptr [eax], al
+0x27c0012:	jl	0x27c0016
+0x27c0014:	add	byte ptr [eax], al
+0x27c0016:	add	byte ptr [eax], al
+0x27c0018:	add	byte ptr [eax], al
+0x27c001a:	add	byte ptr [eax], al
+0x27c001c:	add	byte ptr [eax], al
+0x27c001e:	add	byte ptr [eax], al
+0x27c0020:	adc	byte ptr [eax], al
+0x27c0022:	jl	0x27c0026
+0x27c0024:	add	byte ptr [eax], al
+0x27c0026:	add	byte ptr [eax], al
+0x27c0028:	add	byte ptr [eax], al
+0x27c002a:	add	byte ptr [eax], al
+0x27c002c:	add	byte ptr [eax], al
+0x27c002e:	add	byte ptr [eax], al
+0x27c0030:	and	byte ptr [eax], al
+0x27c0032:	jl	0x27c0036
+0x27c0034:	add	byte ptr [eax], al
+0x27c0036:	add	byte ptr [eax], al
+0x27c0038:	add	byte ptr [eax], al
+0x27c003a:	add	byte ptr [eax], al
+0x27c003c:	add	byte ptr [eax], al
+0x27c003e:	add	byte ptr [eax], al
+1740	FrameworkServi	0x3150000	0x3150fff	VadS	PAGE_EXECUTE_READWRITE	1	1	Disabled	N/A	
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ................
+00 00 15 03 00 00 00 00 00 00 00 00 00 00 00 00 ................
+10 00 15 03 00 00 00 00 00 00 00 00 00 00 00 00 ................
+20 00 15 03 00 00 00 00 00 00 00 00 00 00 00 00  ...............	
+0x3150000:	add	byte ptr [eax], al
+0x3150002:	add	byte ptr [eax], al
+0x3150004:	add	byte ptr [eax], al
+0x3150006:	add	byte ptr [eax], al
+0x3150008:	add	byte ptr [eax], al
+0x315000a:	add	byte ptr [eax], al
+0x315000c:	add	byte ptr [eax], al
+0x315000e:	add	byte ptr [eax], al
+0x3150010:	add	byte ptr [eax], al
+0x3150012:	adc	eax, 3
+0x3150017:	add	byte ptr [eax], al
+0x3150019:	add	byte ptr [eax], al
+0x315001b:	add	byte ptr [eax], al
+0x315001d:	add	byte ptr [eax], al
+0x315001f:	add	byte ptr [eax], dl
+0x3150021:	add	byte ptr [3], dl
+0x3150027:	add	byte ptr [eax], al
+0x3150029:	add	byte ptr [eax], al
+0x315002b:	add	byte ptr [eax], al
+0x315002d:	add	byte ptr [eax], al
+0x315002f:	add	byte ptr [eax], ah
+0x3150031:	add	byte ptr [3], dl
+0x3150037:	add	byte ptr [eax], al
+0x3150039:	add	byte ptr [eax], al
+0x315003b:	add	byte ptr [eax], al
+0x315003d:	add	byte ptr [eax], al
+1824	mfevtps.exe	0x1a30000	0x1a6ffff	VadS	PAGE_EXECUTE_READWRITE	1	1	Disabled	N/A	
+48 0e f5 ad e6 8d 00 01 ee ff ee ff 00 00 00 00 H...............
+a8 00 a3 01 a8 00 a3 01 00 00 a3 01 00 00 a3 01 ................
+40 00 00 00 88 05 a3 01 00 00 a7 01 3f 00 00 00 @...........?...
+01 00 00 00 00 00 00 00 f0 0f a3 01 f0 0f a3 01 ................	
+0x1a30000:	dec	eax
+0x1a30001:	push	cs
+0x1a30002:	cmc	
+
+---
+Volatility 3 Framework 2.27.0
+
+PID	Process	Args
+
+4	System	-
+280	smss.exe	\SystemRoot\System32\smss.exe
+412	csrss.exe	%SystemRoot%\system32\csrss.exe ObjectDirectory=\Windows SharedSection=1024,12288,512 Windows=On SubSystemType=Windows ServerDll=basesrv,1 ServerDll=winsrv:UserServerDllInitialization,3 ServerDll=winsrv:ConServerDllInitialization,2 ServerDll=sxssrv,4 ProfileControl=Off MaxRequestThreads=16
+464	wininit.exe	wininit.exe
+472	csrss.exe	%SystemRoot%\system32\csrss.exe ObjectDirectory=\Windows SharedSection=1024,12288,512 Windows=On SubSystemType=Windows ServerDll=basesrv,1 ServerDll=winsrv:UserServerDllInitialization,3 ServerDll=winsrv:ConServerDllInitialization,2 ServerDll=sxssrv,4 ProfileControl=Off MaxRequestThreads=16
+520	winlogon.exe	winlogon.exe
+564	services.exe	C:\Windows\system32\services.exe
+592	lsass.exe	C:\Window</pre>
+</details>
+</div></div>
+  </details>
+</div>
+</section>
+  <section class="section">
+  <div class="synthesis-header">
+    <h2 class="section-title" style="margin-bottom:0;border:none;padding:0">
+      Triage Synthesis (Pass 2 LLM Assessment)
+    </h2>
+    <span class="synthesis-warning">⚠ LLM hypothesis — verify against raw evidence above</span>
+  </div>
+  <div class="synthesis-box prose"><h1>Final Forensic Assessment — WKS-WIN732BITA (SHIELDBASE Domain)</h1>
+<hr />
+<h2>Attack Chain</h2>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Time (UTC)</th>
+<th>Host</th>
+<th>User</th>
+<th>Technique</th>
+<th>Evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>2012-04-03 18:39:35</td>
+<td>WKS-WIN732BITA</td>
+<td>SRL-Helpdesk</td>
+<td>Initial ADMIN$ probe from 10.3.58.7</td>
+<td>EID 5140, Security.evtx: <code>\\*\ADMIN$</code> access failure, src IP 10.3.58.7:4508, LogonId 0x174A094B</td>
+</tr>
+<tr>
+<td>2</td>
+<td>2012-04-03 19:29:14</td>
+<td>WKS-WIN732BITA</td>
+<td>SRL-Helpdesk</td>
+<td>Repeated ADMIN$ probe from 10.3.58.7</td>
+<td>EID 5140, Security.evtx: <code>\\*\ADMIN$</code> access failure, src IP 10.3.58.7:1425, LogonId 0x17547CFD</td>
+</tr>
+<tr>
+<td>3</td>
+<td>2012-04-03 21:02:49</td>
+<td>WKS-WIN732BITA</td>
+<td>vibranium</td>
+<td>Failed NTLM auth — account not yet known to DC</td>
+<td>EID 4776 (failure 0xC0000064) + EID 4625, Security.evtx: target <code>vibranium</code>, src workstation <code>p6epIi1yg3AH8X6E</code>, IP 10.3.58.7:3049</td>
+</tr>
+<tr>
+<td>4</td>
+<td>2012-04-03 21:03:05</td>
+<td>WKS-WIN732BITA</td>
+<td>vibranium</td>
+<td>Successful network logon (Type 3) with admin privileges</td>
+<td>EID 4624 + EID 4672 (SeDebugPrivilege, SeBackupPrivilege, SeImpersonatePrivilege granted), Security.evtx: src workstation <code>jg1dSANtJTwJwsg3</code>, IP 10.3.58.7:3072, NTLM V2, LogonId 0x176C20C3</td>
+</tr>
+<tr>
+<td>5</td>
+<td>2012-04-03 21:11:07</td>
+<td>WKS-WIN732BITA</td>
+<td>vibranium</td>
+<td>PsExec service installed by vibranium (SID -1673)</td>
+<td>EID 7045, System.evtx: ServiceName=PsExec, ImagePath=%SystemRoot%\PSEXESVC.EXE, Account=LocalSystem, SubjectSid=S-1-5-21-…-1673</td>
+</tr>
+<tr>
+<td>6</td>
+<td>2012-04-03 21:11:08</td>
+<td>WKS-WIN732BITA</td>
+<td>vibranium</td>
+<td>PsExec service executed (PSEXESVC.EXE run confirmed)</td>
+<td>Prefetch: <code>PSEXESVC.EXE-51BA46F2.pf</code>, atime 2012-04-03 21:11:08, mtime 2012-04-04 18:52:21; binary <code>\Windows\PSEXESVC.EXE</code> MD5 a283e768fa12ef33087f07b01f82d6dd, mtime 2012-04-04 18:52:11</td>
+</tr>
+<tr>
+<td>7</td>
+<td>2012-04-03 21:11–21:20</td>
+<td>WKS-WIN732BITA</td>
+<td>vibranium</td>
+<td>PsExec re-invoked at least 6 times in rapid succession</td>
+<td>EID 7045 × 6 occurrences in System.evtx between 21:11:07–21:20:45, all with %SystemRoot%\PSEXESVC.EXE; matching 4624/4672 pairs at same timestamps</td>
+</tr>
+<tr>
+<td>8</td>
+<td>2012-04-03 22:53:39</td>
+<td>WKS-WIN732BITA</td>
+<td>vibranium</td>
+<td>Anomalous binary dropped into System32</td>
+<td><code>\Windows\System32\spinlock.exe</code>: MD5 6bff2aebb8852fc2658b9768d2166ece, mtime 2012-04-03 22:53:39, ctime 2012-04-03 23:02:30, size 2,271,885 bytes; strings reveal Python import machinery (PyImport_AddModule, PyImport_ImportModule, PyImport_ExecCodeModule) — Python-compiled executable</td>
+</tr>
+<tr>
+<td>9</td>
+<td>2012-04-03 23:09:26</td>
+<td>WKS-WIN732BITA</td>
+<td>vibranium</td>
+<td>spinlock.exe executed</td>
+<td>Prefetch: <code>SPINLOCK.EXE-1610A75A.pf</code>, atime 2012-04-03 23:09:26, mtime 2012-04-04 18:55:01, size 35,678 bytes</td>
+</tr>
+<tr>
+<td>10</td>
+<td>2012-04-03 23:54:46</td>
+<td>WKS-WIN732BITA</td>
+<td>(SYSTEM/vibranium)</td>
+<td>Shellcode injector a.exe dropped to Windows\Temp</td>
+<td><code>\Windows\Temp\a.exe</code>: MD5 c4b0458c04abdaa773348c2668212b45, mtime 2012-04-04 00:44:11, size 9,216 bytes; PDB path <code>c:\code\httppump\inner\objchk_wxp_x86\i386\i.pdb</code>; imports WriteProcessMemory, VirtualAlloc, CreateThread, LoadLibraryA, GetProcAddress — classic process injection loader</td>
+</tr>
+<tr>
+<td>11</td>
+<td>2012-04-03 23:54:48</td>
+<td>WKS-WIN732BITA</td>
+<td>(SYSTEM/vibranium)</td>
+<td>a.exe executed from Windows\Temp</td>
+<td>Prefetch: <code>A.EXE-8D56B1C4.pf</code>, atime 2012-04-03 23:54:48, mtime 2012-04-04 00:43:07</td>
+</tr>
+<tr>
+<td>12</td>
+<td>2012-04-04 00:44:11</td>
+<td>WKS-WIN732BITA</td>
+<td>(SYSTEM/vibranium)</td>
+<td>a.exe (same injector) also dropped to vibranium's Temp</td>
+<td><code>\Users\vibranium\AppData\Local\Temp\a.exe</code>: MD5 c4b0458c04abdaa773348c2668212b45 (identical to Windows\Temp copy), mtime 2012-04-07 17:34:10</td>
+</tr>
+<tr>
+<td>13</td>
+<td>2012-04-04 02:22:00</td>
+<td>WKS-WIN732BITA</td>
+<td>vibranium</td>
+<td>a.exe executed from vibranium's Temp</td>
+<td>Prefetch: <code>A.EXE-F91CBA0E.pf</code>, atime 2012-04-04 02:22:02, mtime 2012-04-07 21:05:49</td>
+</tr>
+<tr>
+<td>14</td>
+<td>2012-04-04 02:22:42</td>
+<td>WKS-WIN732BITA</td>
+<td>vibranium</td>
+<td>Filesystem enumeration under Windows\ via Explorer</td>
+<td>EID 4663 × multiple, Security.evtx: vibranium / explorer.exe accessing C:\Windows\Boot, C:\Windows\diagnostics at 02:22:42, LogonId 0x8EBBD</td>
+</tr>
+<tr>
+<td>15</td>
+<td>2012-04-04 15:36:56</td>
+<td>WKS-WIN732BITA</td>
+<td>vibranium</td>
+<td>Opened classified intelligence picture folder (nromanoff's profile)</td>
+<td>LNK: <code>vibranium\…\Recent\Carrier Landing Pad.lnk</code>, mtime 2012-04-04 15:36:56; target <code>C:\Users\nromanoff\Pictures\New-Site-HQ-And-Landing-Pad\Carrier Landing Pad</code></td>
+</tr>
+<tr>
+<td>16</td>
+<td>2012-04-04 15:42:19</td>
+<td>WKS-WIN732BITA</td>
+<td>vibranium</td>
+<td>Opened CC backstopped-accounts spreadsheet (nromanoff's profile)</td>
+<td>LNK: <code>vibranium\…\Recent\CC-Backstopped-Accounts.lnk</code>, mtime 2012-04-04 15:42:19; target `C:\Users\nromanoff\Documents\CC R&amp;D Backstopped Accounts\CC-Backstopped-Accounts.</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+  <section class="section">
+  <h2 class="section-title">Pass 2 Investigation Log (75 tool calls)</h2>
+  <div class="log-container"><div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A1]</span> {'evtx_dir': '/mnt/nromanoff/Windows/System32/winevt/Logs', 'output_format': 'csv'}</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A1] output</summary>
+  <pre class="raw-output">{
+  "evtx_dir": "/mnt/nromanoff/Windows/System32/winevt/Logs",
+  "format": "csv",
+  "output_path": "/home/sansforensics/adversa/reports/winevt-hayabusa.csv",
+  "line_count": 0,
+  "output": "",
+  "truncated": false
+}</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A2]</span> stat '/mnt/nromanoff/Users/vibranium/AppData/Local/Temp/a.exe' 2&gt;/dev/null</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A2] output</summary>
+  <pre class="raw-output">File: /mnt/nromanoff/Users/vibranium/AppData/Local/Temp/a.exe
+  Size: 9216      	Blocks: 24         IO Block: 4096   regular file
+Device: 7,11	Inode: 420         Links: 1
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2012-04-04 02:22:00.465444800 +0000
+Modify: 2012-04-07 17:34:10.470782000 +0000
+Change: 2012-04-07 17:34:10.470782000 +0000
+ Birth: -</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A3]</span> stat '/mnt/nromanoff/Windows/Temp/a.exe' 2&gt;/dev/null</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A3] output</summary>
+  <pre class="raw-output">File: /mnt/nromanoff/Windows/Temp/a.exe
+  Size: 9216      	Blocks: 24         IO Block: 4096   regular file
+Device: 7,11	Inode: 60953       Links: 1
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2012-04-03 23:54:46.425884100 +0000
+Modify: 2012-04-04 00:44:11.416792600 +0000
+Change: 2012-04-04 00:44:11.416792600 +0000
+ Birth: -</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A4]</span> stat '/mnt/nromanoff/Windows/PSEXESVC.EXE' 2&gt;/dev/null</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A4] output</summary>
+  <pre class="raw-output">File: /mnt/nromanoff/Windows/PSEXESVC.EXE
+  Size: 181064    	Blocks: 360        IO Block: 4096   regular file
+Device: 7,11	Inode: 10613       Links: 1
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2012-04-04 18:52:10.912899700 +0000
+Modify: 2012-04-04 18:52:11.006649700 +0000
+Change: 2012-04-04 18:52:11.006649700 +0000
+ Birth: -</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A5]</span> {'file_path': '/mnt/nromanoff/Users/vibranium/AppData/Local/Temp/a.exe', 'algorithm': 'md5'}</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A5] output</summary>
+  <pre class="raw-output">{
+  "file": "/mnt/nromanoff/Users/vibranium/AppData/Local/Temp/a.exe",
+  "algorithm": "md5",
+  "hash": "c4b0458c04abdaa773348c2668212b45"
+}</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A6]</span> {'file_path': '/mnt/nromanoff/Windows/Temp/a.exe', 'algorithm': 'md5'}</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A6] output</summary>
+  <pre class="raw-output">{
+  "file": "/mnt/nromanoff/Windows/Temp/a.exe",
+  "algorithm": "md5",
+  "hash": "c4b0458c04abdaa773348c2668212b45"
+}</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A7]</span> {'file_path': '/mnt/nromanoff/Windows/PSEXESVC.EXE', 'algorithm': 'md5'}</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A7] output</summary>
+  <pre class="raw-output">{
+  "file": "/mnt/nromanoff/Windows/PSEXESVC.EXE",
+  "algorithm": "md5",
+  "hash": "a283e768fa12ef33087f07b01f82d6dd"
+}</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A8]</span> strings '/mnt/nromanoff/Users/vibranium/AppData/Local/Temp/a.exe' 2&gt;/dev/null | head -80</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A8] output</summary>
+  <pre class="raw-output">!This program cannot be run in DOS mode.
+RichO
+.text
+`.data
+.reloc
+SetUnhandledExceptionFilter
+kernel32.dll
+('8PW
+700PP
+```hhh
+xppwpp
+RSDS
+c:\code\httppump\inner\objchk_wxp_x86\i386\i.pdb
+Y_^[
+URPQQh(
+L$,3
+UVWS
+[_^]
+SVWj
+_^[]
+8csm
+8csm
+_^[]
+Y__^[
+t?!E
+v	N+D$
+UQPXY]Y[
+WriteProcessMemory
+GetCurrentProcess
+GetProcAddress
+LoadLibraryA
+ExitThread
+VirtualAlloc
+ExitProcess
+CloseHandle
+WaitForSingleObject
+CreateThread
+SetErrorMode
+SetUnhandledExceptionFilter
+KERNEL32.dll
+__getmainargs
+_cexit
+_exit
+_XcptFilter
+exit
+_initterm
+_amsg_exit
+__setusermatherr
+__p__commode
+__p__fmode
+__set_app_type
+msvcrt.dll
+?terminate@@YAXXZ
+_controlfp
+InterlockedExchange
+Sleep
+InterlockedCompareExchange
+RtlUnwind
+GetModuleHandleA
+QueryPerformanceCounter
+GetTickCount
+GetCurrentThreadId
+GetCurrentProcessId
+GetSystemTimeAsFileTime
+TerminateProcess
+UnhandledExceptionFilter
+_oB&amp;3! vK#Nr
+V\3%
+kU'9
+HMXB
+?Zd;
+?/L[
+S;uD
+z?aUY
+D?$?
+U&gt;c{
+zc%C1
+.:3q
+-64OS
+NKeb</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A9]</span> strings '/mnt/nromanoff/Windows/Temp/a.exe' 2&gt;/dev/null | head -80</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A9] output</summary>
+  <pre class="raw-output">!This program cannot be run in DOS mode.
+RichO
+.text
+`.data
+.reloc
+SetUnhandledExceptionFilter
+kernel32.dll
+('8PW
+700PP
+```hhh
+xppwpp
+RSDS
+c:\code\httppump\inner\objchk_wxp_x86\i386\i.pdb
+Y_^[
+URPQQh(
+L$,3
+UVWS
+[_^]
+SVWj
+_^[]
+8csm
+8csm
+_^[]
+Y__^[
+t?!E
+v	N+D$
+UQPXY]Y[
+WriteProcessMemory
+GetCurrentProcess
+GetProcAddress
+LoadLibraryA
+ExitThread
+VirtualAlloc
+ExitProcess
+CloseHandle
+WaitForSingleObject
+CreateThread
+SetErrorMode
+SetUnhandledExceptionFilter
+KERNEL32.dll
+__getmainargs
+_cexit
+_exit
+_XcptFilter
+exit
+_initterm
+_amsg_exit
+__setusermatherr
+__p__commode
+__p__fmode
+__set_app_type
+msvcrt.dll
+?terminate@@YAXXZ
+_controlfp
+InterlockedExchange
+Sleep
+InterlockedCompareExchange
+RtlUnwind
+GetModuleHandleA
+QueryPerformanceCounter
+GetTickCount
+GetCurrentThreadId
+GetCurrentProcessId
+GetSystemTimeAsFileTime
+TerminateProcess
+UnhandledExceptionFilter
+_oB&amp;3! vK#Nr
+V\3%
+kU'9
+HMXB
+?Zd;
+?/L[
+S;uD
+z?aUY
+D?$?
+U&gt;c{
+zc%C1
+.:3q
+-64OS
+NKeb</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A10]</span> strings '/mnt/nromanoff/Windows/PSEXESVC.EXE' 2&gt;/dev/null | head -60</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A10] output</summary>
+  <pre class="raw-output">!This program cannot be run in DOS mode.
+YRich6
+.text
+`.rdata
+@.data
+.rsrc
+Pj!W
+Qj'W
+D$(PUUUUUUh 
+PUUj
+RQPj
+D$0PUUUUUUh!
+T$0R
+u&lt;jL
+T$L3
+L$8B
+D$$;
+L$`R
+D$lPj
+dh$5B
+L$lQ
+D$D 
+T$@Rj
+T$,Rj
+L$,Q
+T$,RPUj
+T$HRj
+D$(Pj
+D$ 3
+T$TRWP
+QPWj
+D$HPj
+L$0Q
+_^][3
+D$Tj
+D$PB
+L$LQ
+D$dL
+SUVh
+D$hj
+L$hjXQ
+T$hjZR
+L$0i
+D$$P
+D$H`XB
+T$lR
+D$hP
+T$hR
+D$hP
+T$hR
+D$hP
+SUV3
+'u6h
+D$(0
+T$ RV
+-P3B
+_^[3
+SVWh
+_^[t
+hpZB</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A11]</span> find '/mnt/nromanoff/Windows/Prefetch' -iname 'A.EXE*.pf' 2&gt;/dev/null | xargs -I{} strings {} 2&gt;/dev</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A11] output</summary>
+  <pre class="raw-output">SCCA
+SCCA</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A12]</span> stat '/mnt/nromanoff/Windows/Prefetch/A.EXE-8D56B1C4.pf' 2&gt;/dev/null &amp;&amp; stat '/mnt/nromanoff/Windows</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A12] output</summary>
+  <pre class="raw-output">File: /mnt/nromanoff/Windows/Prefetch/A.EXE-8D56B1C4.pf
+  Size: 8192      	Blocks: 16         IO Block: 4096   regular file
+Device: 7,11	Inode: 60954       Links: 2
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2012-04-03 23:54:48.019756500 +0000
+Modify: 2012-04-04 00:43:07.433300600 +0000
+Change: 2012-04-04 11:48:15.093750000 +0000
+ Birth: -
+  File: /mnt/nromanoff/Windows/Prefetch/A.EXE-F91CBA0E.pf
+  Size: 8676      	Blocks: 24         IO Block: 4096   regular file
+Device: 7,11	Inode: 61043       Links: 2
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2012-04-04 02:22:02.210571700 +0000
+Modify: 2012-04-07 21:05:49.340779400 +0000
+Change: 2012-04-07 21:05:49.340779400 +0000
+ Birth: -</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A13]</span> dotnet /opt/zimmermantools/EvtxeCmd/EvtxECmd.dll -f '/mnt/nromanoff/Windows/System32/winevt/Logs/Sec</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A13] output</summary>
+  <pre class="raw-output">ERROR: Command blocked — redirection: write target '/dev/null;' resolves outside reports/ (resolved: /dev/null;)</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A14]</span> stat '/mnt/nromanoff/$Recycle.Bin/S-1-5-21-2036804247-3058324640-2116585241-1109/$ISEBKEC.zip' 2&gt;/de</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A14] output</summary>
+  <pre class="raw-output">File: /mnt/nromanoff/$Recycle.Bin/S-1-5-21-2036804247-3058324640-2116585241-1109/$ISEBKEC.zip
+  Size: 544       	Blocks: 2          IO Block: 4096   regular file
+Device: 7,11	Inode: 16531       Links: 1
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2012-03-16 20:27:20.500923000 +0000
+Modify: 2012-03-16 20:27:20.513617500 +0000
+Change: 2012-03-16 20:27:20.513617500 +0000
+ Birth: -
+  File: /mnt/nromanoff/$Recycle.Bin/S-1-5-21-2036804247-3058324640-2116585241-1109/$RSEBKEC.zip
+  Size: 13449655  	Blocks: 26272      IO Block: 4096   regular file
+Device: 7,11	Inode: 10786       Links: 1
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2012-03-16 20:11:49.731661900 +0000
+Modify: 2012-03-16 20:11:00.000000000 +0000
+Change: 2012-03-16 20:27:20.599549500 +0000
+ Birth: -</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A15]</span> rip.pl -r '/mnt/nromanoff/Windows/System32/config/SAM' -f samparse 2&gt;/dev/null | head -80</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A15] output</summary>
+  <pre class="raw-output">----------------------------------------</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A16]</span> dotnet /opt/zimmermantools/EvtxeCmd/EvtxECmd.dll -f '/mnt/nromanoff/Windows/System32/winevt/Logs/Sec</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A16] output</summary>
+  <pre class="raw-output">ERROR: Command blocked — redirection: write target '/dev/null;' resolves outside reports/ (resolved: /dev/null;)</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A17]</span> strings '/mnt/nromanoff/$Recycle.Bin/S-1-5-21-2036804247-3058324640-2116585241-1109/$ISEBKEC.zip' 2&gt;</div>
+  
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A18]</span> rip.pl -r '/mnt/nromanoff/Windows/System32/config/SAM' -f samparse 2&gt;/dev/null</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A18] output</summary>
+  <pre class="raw-output">----------------------------------------</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A19]</span> dotnet /opt/zimmermantools/EvtxeCmd/EvtxECmd.dll -f '/mnt/nromanoff/Windows/System32/winevt/Logs/Sec</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A19] output</summary>
+  <pre class="raw-output">EvtxECmd version 1.5.2.0
+
+Author: Eric Zimmerman (saericzimmerman@gmail.com)
+https://github.com/EricZimmerman/evtx
+
+Command line: -f /mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx --csv /tmp/evtx_out --csvf security.csv
+
+CSV output will be saved to /tmp/evtx_out/security.csv
+
+Maps loaded: 453
+
+Processing /mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx...
+Chunk count: 30, Iterating records...
+Record #: 523464 (timestamp: 2012-03-29 05:02:59.2593562): Warning! Time just went backwards! Last seen time before change: 2012-03-29 05:03:05.6081226
+Record # 526371 (Event Record Id: 526371): In map for event 1100, Property /Event/UserData[@Name="ServiceShutdown"] not found! Replacing with empty string
+Record # 526468 (Event Record Id: 526468): In map for event 1100, Property /Event/UserData[@Name="ServiceShutdown"] not found! Replacing with empty string
+Record #: 526670 (timestamp: 2012-04-04 11:47:46.3437500): Warning! Time just went backwards! Last seen time before change: 2012-04-04 11:47:53.4687500
+Error processing record #529354: Root element is missing.
+
+Event log details
+Flags: IsDirty
+Chunk count: 30
+Stored/Calculated CRC: D4742453/D4742453
+Earliest timestamp: 2012-03-29 05:02:59.2593562
+Latest timestamp:   2012-04-07 17:38:09.4692524
+Total event log records found: 5,892
+
+Records included: 5,891 Errors: 1 Events dropped: 0
+
+Errors
+Record #21: Error: Root element is missing.
+
+Metrics (including dropped events)
+Event ID	Count
+1100		2
+1101		1
+1105		1
+4608		3
+4610		3
+4611		72
+4614		3
+4616		14
+4622		27
+4624		910
+4625		90
+4634		797
+4647		10
+4648		95
+4663		321
+4672		347
+4673		364
+4674		417
+4717		1
+4719		312
+4724		2
+4732		1
+4733		2
+4738		2
+4776		101
+4778		9
+4779		12
+4800		2
+4801		1
+4902		3
+4904		2
+4905		2
+4985		1,814
+5024		3
+5033		3
+5038		1
+5056		2
+5058		2
+5061		2
+5140		26
+5156		3
+5158		2
+5478		1
+6144		13
+6281		89
+8222		2
+
+Processed 1 file in 2.3229 seconds
+
+
+Files with errors
+/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx error count: 1
+
+DONE_SEC</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A20]</span> rip.pl -r '/mnt/nromanoff/Windows/System32/config/SYSTEM' -f services 2&gt;/dev/null | head -100</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A20] output</summary>
+  <pre class="raw-output">----------------------------------------</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A21]</span> strings '/mnt/nromanoff/$Recycle.Bin/S-1-5-21-2036804247-3058324640-2116585241-1109/$RSEBKEC.zip' 2&gt;</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A21] output</summary>
+  <pre class="raw-output">Carrier Landing Pad/PK
+Carrier Landing Pad/clp-1.JPG
++{;sj^
+pQ HM
+r-xB
+qF? 
+@D@x8
+PQQAh
+4TTtlt
+LL,,,
+	1	)
+OHLJ
+[~AaQeUuMm]}C
+K^xp^
+&gt;xHx
+%N:`:
+Vz7~
+gbc|"-
+'\fc+r
+i&amp;[&amp;
+X'}e-
+~#o-
+?'Lw
+XuLMl
+yRB^
+jY6j?;
+sC:/
+ao.P
+ancM
+&amp;&gt;qI
+&gt;}Up43
+-N?j
+F?)k$
+k_S(
+~^@V
+aO!+
+}-8;-E
+n4[{}
+wI~6
+M&lt;kW</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A22]</span> grep -iE '4624|4625|4720|4776|7045|4688' /tmp/evtx_out/security.csv | head -60</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A22] output</summary>
+  <pre class="raw-output">523472,523472,2012-03-29 05:37:13.6091518,4624,LogAlways,Microsoft-Windows-Security-Auditing,Security,488,3220,WKS-WIN732BITA.shieldbase.local,0,,Successful logon,-\-," (::1)",Target: SHIELDBASE\WKS-WIN732BITA$,LogonType 3,LogonId: 0x105ACA0F,AuthenticationPackageName: Kerberos,LogonProcessName: Kerberos,,-,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit success,0,"{""EventData"":{""Data"":[{""@Name"":""SubjectUserSid"",""#text"":""S-1-0-0""},{""@Name"":""SubjectUserName"",""#text"":""-""},{""@Name"":""SubjectDomainName"",""#text"":""-""},{""@Name"":""SubjectLogonId"",""#text"":""0x0""},{""@Name"":""TargetUserSid"",""#text"":""S-1-5-18""},{""@Name"":""TargetUserName"",""#text"":""WKS-WIN732BITA$""},{""@Name"":""TargetDomainName"",""#text"":""SHIELDBASE""},{""@Name"":""TargetLogonId"",""#text"":""0x105ACA0F""},{""@Name"":""LogonType"",""#text"":""3""},{""@Name"":""LogonProcessName"",""#text"":""Kerberos""},{""@Name"":""AuthenticationPackageName"",""#text"":""Kerberos""},{""@Name"":""WorkstationName""},{""@Name"":""LogonGuid"",""#text"":""284420bd-af8c-c92e-f08c-95c487e3f32a""},{""@Name"":""TransmittedServices"",""#text"":""-""},{""@Name"":""LmPackageName"",""#text"":""-""},{""@Name"":""KeyLength"",""#text"":""0""},{""@Name"":""ProcessId"",""#text"":""0x0""},{""@Name"":""ProcessName"",""#text"":""-""},{""@Name"":""IpAddress"",""#text"":""::1""},{""@Name"":""IpPort"",""#text"":""0""}]}}"
+523491,523491,2012-03-29 06:36:22.6151070,4624,LogAlways,Microsoft-Windows-Security-Auditing,Security,488,3420,WKS-WIN732BITA.shieldbase.local,0,,Successful logon,-\-," (-)",Target: SHIELDBASE\WKS-WIN732BITA$,LogonType 3,LogonId: 0x1067CBB2,AuthenticationPackageName: Kerberos,LogonProcessName: Kerberos,,-,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit success,0,"{""EventData"":{""Data"":[{""@Name"":""SubjectUserSid"",""#text"":""S-1-0-0""},{""@Name"":""SubjectUserName"",""#text"":""-""},{""@Name"":""SubjectDomainName"",""#text"":""-""},{""@Name"":""SubjectLogonId"",""#text"":""0x0""},{""@Name"":""TargetUserSid"",""#text"":""S-1-5-18""},{""@Name"":""TargetUserName"",""#text"":""WKS-WIN732BITA$""},{""@Name"":""TargetDomainName"",""#text"":""SHIELDBASE""},{""@Name"":""TargetLogonId"",""#text"":""0x1067CBB2""},{""@Name"":""LogonType"",""#text"":""3""},{""@Name"":""LogonProcessName"",""#text"":""Kerberos""},{""@Name"":""AuthenticationPackageName"",""#text"":""Kerberos""},{""@Name"":""WorkstationName""},{""@Name"":""LogonGuid"",""#text"":""9d39ba06-9d0e-82d2-3852-03e5a52a62e9""},{""@Name"":""TransmittedServices"",""#text"":""-""},{""@Name"":""LmPackageName"",""#text"":""-""},{""@Name"":""KeyLength"",""#text"":""0""},{""@Name"":""ProcessId"",""#text"":""0x0""},{""@Name"":""ProcessName"",""#text"":""-""},{""@Name"":""IpAddress"",""#text"":""-""},{""@Name"":""IpPort"",""#text"":""-""}]}}"
+523495,523495,2012-03-29 06:36:23.5993182,4624,LogAlways,Microsoft-Windows-Security-Auditing,Security,488,3420,WKS-WIN732BITA.shieldbase.local,0</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A23]</span> dotnet /opt/zimmermantools/EvtxeCmd/EvtxECmd.dll -f '/mnt/nromanoff/Windows/System32/winevt/Logs/Sys</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A23] output</summary>
+  <pre class="raw-output">EvtxECmd version 1.5.2.0
+
+Author: Eric Zimmerman (saericzimmerman@gmail.com)
+https://github.com/EricZimmerman/evtx
+
+Command line: -f /mnt/nromanoff/Windows/System32/winevt/Logs/System.evtx --csv /tmp/evtx_out --csvf system.csv
+
+CSV output will be saved to /tmp/evtx_out/system.csv
+
+Maps loaded: 453
+
+Processing /mnt/nromanoff/Windows/System32/winevt/Logs/System.evtx...
+Chunk count: 18, Iterating records...
+Record #: 11884 (timestamp: 2012-03-13 20:01:59.5344168): Warning! Time just went backwards! Last seen time before change: 2012-03-13 20:02:00.5812985
+Record # 11928 (Event Record Id: 11928): In map for event 1074, Property /Event/EventData/Data[@Name="param7"] not found! Replacing with empty string
+Record # 11928 (Event Record Id: 11928): In map for event 1074, Property /Event/EventData/Data[@Name="param1"] not found! Replacing with empty string
+Record # 11928 (Event Record Id: 11928): In map for event 1074, Property /Event/EventData/Data[@Name="param2"] not found! Replacing with empty string
+Record # 11928 (Event Record Id: 11928): In map for event 1074, Property /Event/EventData/Data[@Name="param3"] not found! Replacing with empty string
+Record # 11928 (Event Record Id: 11928): In map for event 1074, Property /Event/EventData/Data[@Name="param5"] not found! Replacing with empty string
+Record # 11928 (Event Record Id: 11928): In map for event 1074, Property /Event/EventData/Data[@Name="param4"] not found! Replacing with empty string
+Record #: 11944 (timestamp: 2012-03-14 07:08:04.2040017): Warning! Time just went backwards! Last seen time before change: 2012-03-14 07:11:21.0000000
+Record # 11961 (Event Record Id: 11961): In map for event 1, Property /Event/EventData/Data[@Name="Reason"] not found! Replacing with empty string
+Record # 11972 (Event Record Id: 11972): In map for event 13, Property /Event/EventData/Data[@Name="BootMode"] not found! Replacing with empty string
+Record # 12025 (Event Record Id: 12025): In map for event 1, Property /Event/EventData/Data[@Name="Reason"] not found! Replacing with empty string
+Record #: 12025 (timestamp: 2012-03-14 07:11:59.3868750): Warning! Time just went backwards! Last seen time before change: 2012-03-14 07:12:12.8593750
+Record # 12147 (Event Record Id: 12147): In map for event 1074, Property /Event/EventData/Data[@Name="param7"] not found! Replacing with empty string
+Record # 12147 (Event Record Id: 12147): In map for event 1074, Property /Event/EventData/Data[@Name="param1"] not found! Replacing with empty string
+Record # 12147 (Event Record Id: 12147): In map for event 1074, Property /Event/EventData/Data[@Name="param2"] not found! Replacing with empty string
+Record # 12147 (Event Record Id: 12147): In map for event 1074, Property /Event/EventData/Data[@Name="param3"] not found! Replacing with empty string
+Record # 12147 (Event Record Id: 12147): In map for event 1074, Property /Event/EventData/Data[@Name="param5"] not found! Replacing with empty string
+Record # 12147 (Event Record Id: 12147): In m</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A24]</span> grep -iE '"4624"' /tmp/evtx_out/security.csv | grep -iE 'vibranium|rsydow|Tdungan|SRL|uimccx' | head</div>
+  
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A25]</span> grep -iE '"4624"' /tmp/evtx_out/security.csv | grep -iE 'LogonType 3|LogonType 10|LogonType 2' | gre</div>
+  
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A26]</span> grep -iE '"4720"' /tmp/evtx_out/security.csv | head -20</div>
+  
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A27]</span> grep -i 'vibranium\|rsydow\|Tdungan\|uimccx\|SRL-Help' /tmp/evtx_out/security.csv | head -40</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A27] output</summary>
+  <pre class="raw-output">523465,523465,2012-03-29 05:08:05.0787200,4673,LogAlways,Microsoft-Windows-Security-Auditing,Security,488,560,WKS-WIN732BITA.shieldbase.local,0,,A privileged service was called,SHIELDBASE\tdungan (S-1-5-21-2036804247-3058324640-2116585241-1107),,PrivilegeList: SeTcbPrivilege,ObjectServer: Security,LogonId: 0x10446219,Service: -,,,C:\Program Files\McAfee\VirusScan Enterprise\scan32.exe (PID: 0x2D58),False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit failure,0,"{""EventData"":{""Data"":[{""@Name"":""SubjectUserSid"",""#text"":""S-1-5-21-2036804247-3058324640-2116585241-1107""},{""@Name"":""SubjectUserName"",""#text"":""tdungan""},{""@Name"":""SubjectDomainName"",""#text"":""SHIELDBASE""},{""@Name"":""SubjectLogonId"",""#text"":""0x10446219""},{""@Name"":""ObjectServer"",""#text"":""Security""},{""@Name"":""Service"",""#text"":""-""},{""@Name"":""PrivilegeList"",""#text"":""SeTcbPrivilege""},{""@Name"":""ProcessId"",""#text"":""0x2D58""},{""@Name"":""ProcessName"",""#text"":""C:\\Program Files\\McAfee\\VirusScan Enterprise\\scan32.exe""}]}}"
+523466,523466,2012-03-29 05:08:05.0787200,4673,LogAlways,Microsoft-Windows-Security-Auditing,Security,488,560,WKS-WIN732BITA.shieldbase.local,0,,A privileged service was called,SHIELDBASE\tdungan (S-1-5-21-2036804247-3058324640-2116585241-1107),,PrivilegeList: SeTcbPrivilege,ObjectServer: Security,LogonId: 0x10446219,Service: -,,,C:\Program Files\McAfee\VirusScan Enterprise\scan32.exe (PID: 0x2D58),False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit failure,0,"{""EventData"":{""Data"":[{""@Name"":""SubjectUserSid"",""#text"":""S-1-5-21-2036804247-3058324640-2116585241-1107""},{""@Name"":""SubjectUserName"",""#text"":""tdungan""},{""@Name"":""SubjectDomainName"",""#text"":""SHIELDBASE""},{""@Name"":""SubjectLogonId"",""#text"":""0x10446219""},{""@Name"":""ObjectServer"",""#text"":""Security""},{""@Name"":""Service"",""#text"":""-""},{""@Name"":""PrivilegeList"",""#text"":""SeTcbPrivilege""},{""@Name"":""ProcessId"",""#text"":""0x2D58""},{""@Name"":""ProcessName"",""#text"":""C:\\Program Files\\McAfee\\VirusScan Enterprise\\scan32.exe""}]}}"
+523747,523747,2012-03-29 22:44:40.0373447,4634,LogAlways,Microsoft-Windows-Security-Auditing,Security,488,3420,WKS-WIN732BITA.shieldbase.local,2,,An account was logged off,,,Target: SHIELDBASE\tdungan,LogonType 2,LogonId: 0xB0B7871,,,,,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit success,0,"{""EventData"":{""Data"":[{""@Name"":""TargetUserSid"",""#text"":""S-1-5-21-2036804247-3058324640-2116585241-1107""},{""@Name"":""TargetUserName"",""#text"":""tdungan""},{""@Name"":""TargetDomainName"",""#text"":""SHIELDBASE""},{""@Name"":""TargetLogonId"",""#text"":""0xB0B7871""},{""@Name"":""LogonType"",""#text"":""2""}]}}"
+523748,523748,2012-03-29 22:44:40.0373447,4634,LogAlways,Microsoft-Windows-Security-Auditing,Security,488,3420,WKS-WIN732BITA.shieldbase.local,2,,An account was logged off,,,Target: SHIELDBASE\tdungan,LogonT</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A28]</span> grep -E '4720|4738|4724|4732' /tmp/evtx_out/security.csv | head -30</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A28] output</summary>
+  <pre class="raw-output">524571,524571,2012-03-31 20:16:18.2263870,4672,LogAlways,Microsoft-Windows-Security-Auditing,Security,488,3220,WKS-WIN732BITA.shieldbase.local,10,,Administrative logon,SHIELDBASE\WKS-WIN732BITA$ (S-1-5-18),,"PrivilegeList: SeSecurityPrivilege, SeBackupPrivilege, SeRestorePrivilege, SeTakeOwnershipPrivilege, SeDebugPrivilege, SeSystemEnvironmentPrivilege, SeLoadDriverPrivilege, SeImpersonatePrivilege",LogonId: 0x13C44738,,,,,,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit success,0,"{""EventData"":{""Data"":[{""@Name"":""SubjectUserSid"",""#text"":""S-1-5-18""},{""@Name"":""SubjectUserName"",""#text"":""WKS-WIN732BITA$""},{""@Name"":""SubjectDomainName"",""#text"":""SHIELDBASE""},{""@Name"":""SubjectLogonId"",""#text"":""0x13C44738""},{""@Name"":""PrivilegeList"",""#text"":""SeSecurityPrivilege, SeBackupPrivilege, SeRestorePrivilege, SeTakeOwnershipPrivilege, SeDebugPrivilege, SeSystemEnvironmentPrivilege, SeLoadDriverPrivilege, SeImpersonatePrivilege""}]}}"
+524572,524572,2012-03-31 20:16:18.2273636,4624,LogAlways,Microsoft-Windows-Security-Auditing,Security,488,3220,WKS-WIN732BITA.shieldbase.local,10,,Successful logon,-\-," (::1)",Target: SHIELDBASE\WKS-WIN732BITA$,LogonType 3,LogonId: 0x13C44738,AuthenticationPackageName: Kerberos,LogonProcessName: Kerberos,,-,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit success,0,"{""EventData"":{""Data"":[{""@Name"":""SubjectUserSid"",""#text"":""S-1-0-0""},{""@Name"":""SubjectUserName"",""#text"":""-""},{""@Name"":""SubjectDomainName"",""#text"":""-""},{""@Name"":""SubjectLogonId"",""#text"":""0x0""},{""@Name"":""TargetUserSid"",""#text"":""S-1-5-18""},{""@Name"":""TargetUserName"",""#text"":""WKS-WIN732BITA$""},{""@Name"":""TargetDomainName"",""#text"":""SHIELDBASE""},{""@Name"":""TargetLogonId"",""#text"":""0x13C44738""},{""@Name"":""LogonType"",""#text"":""3""},{""@Name"":""LogonProcessName"",""#text"":""Kerberos""},{""@Name"":""AuthenticationPackageName"",""#text"":""Kerberos""},{""@Name"":""WorkstationName""},{""@Name"":""LogonGuid"",""#text"":""cf00eb0f-b031-0808-21c3-51f1b8738e81""},{""@Name"":""TransmittedServices"",""#text"":""-""},{""@Name"":""LmPackageName"",""#text"":""-""},{""@Name"":""KeyLength"",""#text"":""0""},{""@Name"":""ProcessId"",""#text"":""0x0""},{""@Name"":""ProcessName"",""#text"":""-""},{""@Name"":""IpAddress"",""#text"":""::1""},{""@Name"":""IpPort"",""#text"":""0""}]}}"
+524573,524573,2012-03-31 20:16:18.4334262,4634,LogAlways,Microsoft-Windows-Security-Auditing,Security,488,3420,WKS-WIN732BITA.shieldbase.local,10,,An account was logged off,,,Target: SHIELDBASE\WKS-WIN732BITA$,LogonType 3,LogonId: 0x13C44738,,,,,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit success,0,"{""EventData"":{""Data"":[{""@Name"":""TargetUserSid"",""#text"":""S-1-5-18""},{""@Name"":""TargetUserName"",""#text"":""WKS-WIN732BITA$""},{""@Name"":""TargetDomainName"",""#text"":""SHIELDBASE""},{""@Name"":""TargetLogonId"",""#text"":""0x13C447</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A29]</span> grep -E '7045' /tmp/evtx_out/system.csv | head -20</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A29] output</summary>
+  <pre class="raw-output">11924,11924,2012-03-14 07:04:36.7045577,7036,Info,Service Control Manager,System,560,4700,WKS-WIN732BITA.shieldbase.local,0,,Service started or stopped,,,Name: Volume Shadow Copy | Volume Shadow Copy,Status: stopped,,,,,,False,/mnt/nromanoff/Windows/System32/winevt/Logs/System.evtx,"Audit success, classic",0,"{""EventData"":{""Data"":[{""@Name"":""param1"",""#text"":""Volume Shadow Copy""},{""@Name"":""param2"",""#text"":""stopped""}],""Binary"":""56-00-53-00-53-00-2F-00-31-00-00-00""}}"
+12137,12137,2012-03-15 22:08:06.6964475,7045,Info,Service Control Manager,System,568,3428,WKS-WIN732BITA.shieldbase.local,1,S-1-5-21-2036804247-3058324640-2116585241-1114,A new service was installed in the system,,,Name: BCSWAP,StartType: disabled,"Account: ",,,,C:\Windows\system32\drivers\BCSWAP.sys,False,/mnt/nromanoff/Windows/System32/winevt/Logs/System.evtx,"Audit success, classic",0,"{""EventData"":{""Data"":[{""@Name"":""ServiceName"",""#text"":""BCSWAP""},{""@Name"":""ImagePath"",""#text"":""C:\\Windows\\system32\\drivers\\BCSWAP.sys""},{""@Name"":""ServiceType"",""#text"":""kernel mode driver""},{""@Name"":""StartType"",""#text"":""disabled""},{""@Name"":""AccountName""}]}}"
+12138,12138,2012-03-15 22:08:07.7462925,7045,Info,Service Control Manager,System,568,4068,WKS-WIN732BITA.shieldbase.local,1,S-1-5-21-2036804247-3058324640-2116585241-1114,A new service was installed in the system,,,Name: BCWipe service,StartType: auto start,Account: LocalSystem,,,,C:\Program Files\Jetico\BCWipe\BCWipeSvc.exe,False,/mnt/nromanoff/Windows/System32/winevt/Logs/System.evtx,"Audit success, classic",0,"{""EventData"":{""Data"":[{""@Name"":""ServiceName"",""#text"":""BCWipe service""},{""@Name"":""ImagePath"",""#text"":""C:\\Program Files\\Jetico\\BCWipe\\BCWipeSvc.exe""},{""@Name"":""ServiceType"",""#text"":""user mode service""},{""@Name"":""StartType"",""#text"":""auto start""},{""@Name"":""AccountName"",""#text"":""LocalSystem""}]}}"
+12139,12139,2012-03-15 22:08:08.5783557,7045,Info,Service Control Manager,System,568,3428,WKS-WIN732BITA.shieldbase.local,1,S-1-5-21-2036804247-3058324640-2116585241-1114,A new service was installed in the system,,,Name: fsh,StartType: boot start,"Account: ",,,,C:\Windows\system32\drivers\fsh.sys,False,/mnt/nromanoff/Windows/System32/winevt/Logs/System.evtx,"Audit success, classic",0,"{""EventData"":{""Data"":[{""@Name"":""ServiceName"",""#text"":""fsh""},{""@Name"":""ImagePath"",""#text"":""C:\\Windows\\system32\\drivers\\fsh.sys""},{""@Name"":""ServiceType"",""#text"":""kernel mode driver""},{""@Name"":""StartType"",""#text"":""boot start""},{""@Name"":""AccountName""}]}}"
+13175,13175,2012-03-20 18:59:35.4608260,7045,Info,Service Control Manager,System,476,6640,WKS-WIN732BITA.shieldbase.local,6,S-1-5-21-2036804247-3058324640-2116585241-1114,A new service was installed in the system,,,Name: FResponse Service,StartType: demand start,Account: LocalSystem,,,,f-response-ent.exe,False,/mnt/nromanoff/Windows/System32/winevt/Logs/System.evtx,"Audi</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A30]</span> grep -E '7045' /tmp/evtx_out/system.csv | grep -iv 'BCSWAP\|BCWipe\|fsh\|FResponse\|Mnemosyne\|VMwar</div>
+  
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A31]</span> grep -E '7045' /tmp/evtx_out/system.csv | grep -i 'PSEXE\|psexesvc\|metsvc\|meterp\|backdoor\|shell\</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A31] output</summary>
+  <pre class="raw-output">14794,14794,2012-04-03 21:11:07.4823242,7045,Info,Service Control Manager,System,476,10672,WKS-WIN732BITA.shieldbase.local,15,S-1-5-21-2036804247-3058324640-2116585241-1673,A new service was installed in the system,,,Name: PsExec,StartType: demand start,Account: LocalSystem,,,,%SystemRoot%\PSEXESVC.EXE,False,/mnt/nromanoff/Windows/System32/winevt/Logs/System.evtx,"Audit success, classic",0,"{""EventData"":{""Data"":[{""@Name"":""ServiceName"",""#text"":""PsExec""},{""@Name"":""ImagePath"",""#text"":""%SystemRoot%\\PSEXESVC.EXE""},{""@Name"":""ServiceType"",""#text"":""user mode service""},{""@Name"":""StartType"",""#text"":""demand start""},{""@Name"":""AccountName"",""#text"":""LocalSystem""}]}}"
+14797,14797,2012-04-03 21:12:04.5012545,7045,Info,Service Control Manager,System,476,10672,WKS-WIN732BITA.shieldbase.local,15,S-1-5-21-2036804247-3058324640-2116585241-1114,A new service was installed in the system,,,Name: PsExec,StartType: demand start,Account: LocalSystem,,,,%SystemRoot%\PSEXESVC.EXE,False,/mnt/nromanoff/Windows/System32/winevt/Logs/System.evtx,"Audit success, classic",0,"{""EventData"":{""Data"":[{""@Name"":""ServiceName"",""#text"":""PsExec""},{""@Name"":""ImagePath"",""#text"":""%SystemRoot%\\PSEXESVC.EXE""},{""@Name"":""ServiceType"",""#text"":""user mode service""},{""@Name"":""StartType"",""#text"":""demand start""},{""@Name"":""AccountName"",""#text"":""LocalSystem""}]}}"
+14800,14800,2012-04-03 21:13:08.0589531,7045,Info,Service Control Manager,System,476,9064,WKS-WIN732BITA.shieldbase.local,15,S-1-5-21-2036804247-3058324640-2116585241-1114,A new service was installed in the system,,,Name: PsExec,StartType: demand start,Account: LocalSystem,,,,%SystemRoot%\PSEXESVC.EXE,False,/mnt/nromanoff/Windows/System32/winevt/Logs/System.evtx,"Audit success, classic",0,"{""EventData"":{""Data"":[{""@Name"":""ServiceName"",""#text"":""PsExec""},{""@Name"":""ImagePath"",""#text"":""%SystemRoot%\\PSEXESVC.EXE""},{""@Name"":""ServiceType"",""#text"":""user mode service""},{""@Name"":""StartType"",""#text"":""demand start""},{""@Name"":""AccountName"",""#text"":""LocalSystem""}]}}"
+14803,14803,2012-04-03 21:13:29.1713152,7045,Info,Service Control Manager,System,476,10672,WKS-WIN732BITA.shieldbase.local,15,S-1-5-21-2036804247-3058324640-2116585241-1673,A new service was installed in the system,,,Name: PsExec,StartType: demand start,Account: LocalSystem,,,,%SystemRoot%\PSEXESVC.EXE,False,/mnt/nromanoff/Windows/System32/winevt/Logs/System.evtx,"Audit success, classic",0,"{""EventData"":{""Data"":[{""@Name"":""ServiceName"",""#text"":""PsExec""},{""@Name"":""ImagePath"",""#text"":""%SystemRoot%\\PSEXESVC.EXE""},{""@Name"":""ServiceType"",""#text"":""user mode service""},{""@Name"":""StartType"",""#text"":""demand start""},{""@Name"":""AccountName"",""#text"":""LocalSystem""}]}}"
+14806,14806,2012-04-03 21:14:56.1839950,7045,Info,Service Control Manager,System,476,10672,WKS-WIN732BITA.shieldbase.local,15,S-1-5-21-2036804247-3058324640-2116585241-1673,</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A32]</span> grep -i 'vibranium' /tmp/evtx_out/security.csv | grep -i '4624\|4634\|4648\|4776' | head -30</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A32] output</summary>
+  <pre class="raw-output">526070,526070,2012-04-03 21:02:49.0537434,4776,LogAlways,Microsoft-Windows-Security-Auditing,Security,488,3420,WKS-WIN732BITA.shieldbase.local,23,,NTLM authentication request,,,Target: vibranium,Workstation: p6epIi1yg3AH8X6E,Status: user name does not exist,,,,,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit failure,0,"{""EventData"":{""Data"":[{""@Name"":""PackageName"",""#text"":""MICROSOFT_AUTHENTICATION_PACKAGE_V1_0""},{""@Name"":""TargetUserName"",""#text"":""vibranium""},{""@Name"":""Workstation"",""#text"":""p6epIi1yg3AH8X6E""},{""@Name"":""Status"",""#text"":""0xC0000064""}]}}"
+526075,526075,2012-04-03 21:03:05.1789661,4624,LogAlways,Microsoft-Windows-Security-Auditing,Security,488,3420,WKS-WIN732BITA.shieldbase.local,24,,Successful logon,-\-,jg1dSANtJTwJwsg3 (10.3.58.7),Target: SHIELDBASE\vibranium,LogonType 3,LogonId: 0x176C20C3,AuthenticationPackageName: NTLM,"LogonProcessName: NtLmSsp ",,-,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit success,0,"{""EventData"":{""Data"":[{""@Name"":""SubjectUserSid"",""#text"":""S-1-0-0""},{""@Name"":""SubjectUserName"",""#text"":""-""},{""@Name"":""SubjectDomainName"",""#text"":""-""},{""@Name"":""SubjectLogonId"",""#text"":""0x0""},{""@Name"":""TargetUserSid"",""#text"":""S-1-5-21-2036804247-3058324640-2116585241-1673""},{""@Name"":""TargetUserName"",""#text"":""vibranium""},{""@Name"":""TargetDomainName"",""#text"":""SHIELDBASE""},{""@Name"":""TargetLogonId"",""#text"":""0x176C20C3""},{""@Name"":""LogonType"",""#text"":""3""},{""@Name"":""LogonProcessName"",""#text"":""NtLmSsp ""},{""@Name"":""AuthenticationPackageName"",""#text"":""NTLM""},{""@Name"":""WorkstationName"",""#text"":""jg1dSANtJTwJwsg3""},{""@Name"":""LogonGuid"",""#text"":""00000000-0000-0000-0000-000000000000""},{""@Name"":""TransmittedServices"",""#text"":""-""},{""@Name"":""LmPackageName"",""#text"":""NTLM V2""},{""@Name"":""KeyLength"",""#text"":""0""},{""@Name"":""ProcessId"",""#text"":""0x0""},{""@Name"":""ProcessName"",""#text"":""-""},{""@Name"":""IpAddress"",""#text"":""10.3.58.7""},{""@Name"":""IpPort"",""#text"":""3072""}]}}"
+526076,526076,2012-04-03 21:03:31.7721146,4634,LogAlways,Microsoft-Windows-Security-Auditing,Security,488,3420,WKS-WIN732BITA.shieldbase.local,24,,An account was logged off,,,Target: SHIELDBASE\vibranium,LogonType 3,LogonId: 0x176C20C3,,,,,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit success,0,"{""EventData"":{""Data"":[{""@Name"":""TargetUserSid"",""#text"":""S-1-5-21-2036804247-3058324640-2116585241-1673""},{""@Name"":""TargetUserName"",""#text"":""vibranium""},{""@Name"":""TargetDomainName"",""#text"":""SHIELDBASE""},{""@Name"":""TargetLogonId"",""#text"":""0x176C20C3""},{""@Name"":""LogonType"",""#text"":""3""}]}}"
+526078,526078,2012-04-03 21:11:07.1385908,4624,LogAlways,Microsoft-Windows-Security-Auditing,Security,488,3420,WKS-WIN732BITA.shieldbase.local,24,,Successful logon,-\-,WKS-WINXP32BIT (10.3.58.7),Target: SHIELDBASE\vi</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A33]</span> grep -i 'vibranium' /tmp/evtx_out/security.csv | head -60</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A33] output</summary>
+  <pre class="raw-output">526070,526070,2012-04-03 21:02:49.0537434,4776,LogAlways,Microsoft-Windows-Security-Auditing,Security,488,3420,WKS-WIN732BITA.shieldbase.local,23,,NTLM authentication request,,,Target: vibranium,Workstation: p6epIi1yg3AH8X6E,Status: user name does not exist,,,,,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit failure,0,"{""EventData"":{""Data"":[{""@Name"":""PackageName"",""#text"":""MICROSOFT_AUTHENTICATION_PACKAGE_V1_0""},{""@Name"":""TargetUserName"",""#text"":""vibranium""},{""@Name"":""Workstation"",""#text"":""p6epIi1yg3AH8X6E""},{""@Name"":""Status"",""#text"":""0xC0000064""}]}}"
+526071,526071,2012-04-03 21:02:49.0537434,4625,LogAlways,Microsoft-Windows-Security-Auditing,Security,488,3420,WKS-WIN732BITA.shieldbase.local,23,,Failed logon,-\-,p6epIi1yg3AH8X6E (10.3.58.7),Target: SHIELD\vibranium,LogonType 3,FailureReason1: the cause is either a bad username or authentication information,FailureReason2: user name does not exist,,,-,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit failure,0,"{""EventData"":{""Data"":[{""@Name"":""SubjectUserSid"",""#text"":""S-1-0-0""},{""@Name"":""SubjectUserName"",""#text"":""-""},{""@Name"":""SubjectDomainName"",""#text"":""-""},{""@Name"":""SubjectLogonId"",""#text"":""0x0""},{""@Name"":""TargetUserSid"",""#text"":""S-1-0-0""},{""@Name"":""TargetUserName"",""#text"":""vibranium""},{""@Name"":""TargetDomainName"",""#text"":""SHIELD""},{""@Name"":""Status"",""#text"":""0xC000006D""},{""@Name"":""FailureReason"",""#text"":""%%2313""},{""@Name"":""SubStatus"",""#text"":""0xC0000064""},{""@Name"":""LogonType"",""#text"":""3""},{""@Name"":""LogonProcessName"",""#text"":""NtLmSsp ""},{""@Name"":""AuthenticationPackageName"",""#text"":""NTLM""},{""@Name"":""WorkstationName"",""#text"":""p6epIi1yg3AH8X6E""},{""@Name"":""TransmittedServices"",""#text"":""-""},{""@Name"":""LmPackageName"",""#text"":""-""},{""@Name"":""KeyLength"",""#text"":""0""},{""@Name"":""ProcessId"",""#text"":""0x0""},{""@Name"":""ProcessName"",""#text"":""-""},{""@Name"":""IpAddress"",""#text"":""10.3.58.7""},{""@Name"":""IpPort"",""#text"":""3049""}]}}"
+526074,526074,2012-04-03 21:03:05.1789661,4672,LogAlways,Microsoft-Windows-Security-Auditing,Security,488,3420,WKS-WIN732BITA.shieldbase.local,24,,Administrative logon,SHIELDBASE\vibranium (S-1-5-21-2036804247-3058324640-2116585241-1673),,"PrivilegeList: SeSecurityPrivilege, SeBackupPrivilege, SeRestorePrivilege, SeTakeOwnershipPrivilege, SeDebugPrivilege, SeSystemEnvironmentPrivilege, SeLoadDriverPrivilege, SeImpersonatePrivilege",LogonId: 0x176C20C3,,,,,,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit success,0,"{""EventData"":{""Data"":[{""@Name"":""SubjectUserSid"",""#text"":""S-1-5-21-2036804247-3058324640-2116585241-1673""},{""@Name"":""SubjectUserName"",""#text"":""vibranium""},{""@Name"":""SubjectDomainName"",""#text"":""SHIELDBASE""},{""@Name"":""SubjectLogonId"",""#text"":""0x176C20C3""},{""@Name"":""PrivilegeList"",""#te</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A34]</span> grep -E '7045' /tmp/evtx_out/system.csv | head -5</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A34] output</summary>
+  <pre class="raw-output">11924,11924,2012-03-14 07:04:36.7045577,7036,Info,Service Control Manager,System,560,4700,WKS-WIN732BITA.shieldbase.local,0,,Service started or stopped,,,Name: Volume Shadow Copy | Volume Shadow Copy,Status: stopped,,,,,,False,/mnt/nromanoff/Windows/System32/winevt/Logs/System.evtx,"Audit success, classic",0,"{""EventData"":{""Data"":[{""@Name"":""param1"",""#text"":""Volume Shadow Copy""},{""@Name"":""param2"",""#text"":""stopped""}],""Binary"":""56-00-53-00-53-00-2F-00-31-00-00-00""}}"
+12137,12137,2012-03-15 22:08:06.6964475,7045,Info,Service Control Manager,System,568,3428,WKS-WIN732BITA.shieldbase.local,1,S-1-5-21-2036804247-3058324640-2116585241-1114,A new service was installed in the system,,,Name: BCSWAP,StartType: disabled,"Account: ",,,,C:\Windows\system32\drivers\BCSWAP.sys,False,/mnt/nromanoff/Windows/System32/winevt/Logs/System.evtx,"Audit success, classic",0,"{""EventData"":{""Data"":[{""@Name"":""ServiceName"",""#text"":""BCSWAP""},{""@Name"":""ImagePath"",""#text"":""C:\\Windows\\system32\\drivers\\BCSWAP.sys""},{""@Name"":""ServiceType"",""#text"":""kernel mode driver""},{""@Name"":""StartType"",""#text"":""disabled""},{""@Name"":""AccountName""}]}}"
+12138,12138,2012-03-15 22:08:07.7462925,7045,Info,Service Control Manager,System,568,4068,WKS-WIN732BITA.shieldbase.local,1,S-1-5-21-2036804247-3058324640-2116585241-1114,A new service was installed in the system,,,Name: BCWipe service,StartType: auto start,Account: LocalSystem,,,,C:\Program Files\Jetico\BCWipe\BCWipeSvc.exe,False,/mnt/nromanoff/Windows/System32/winevt/Logs/System.evtx,"Audit success, classic",0,"{""EventData"":{""Data"":[{""@Name"":""ServiceName"",""#text"":""BCWipe service""},{""@Name"":""ImagePath"",""#text"":""C:\\Program Files\\Jetico\\BCWipe\\BCWipeSvc.exe""},{""@Name"":""ServiceType"",""#text"":""user mode service""},{""@Name"":""StartType"",""#text"":""auto start""},{""@Name"":""AccountName"",""#text"":""LocalSystem""}]}}"
+12139,12139,2012-03-15 22:08:08.5783557,7045,Info,Service Control Manager,System,568,3428,WKS-WIN732BITA.shieldbase.local,1,S-1-5-21-2036804247-3058324640-2116585241-1114,A new service was installed in the system,,,Name: fsh,StartType: boot start,"Account: ",,,,C:\Windows\system32\drivers\fsh.sys,False,/mnt/nromanoff/Windows/System32/winevt/Logs/System.evtx,"Audit success, classic",0,"{""EventData"":{""Data"":[{""@Name"":""ServiceName"",""#text"":""fsh""},{""@Name"":""ImagePath"",""#text"":""C:\\Windows\\system32\\drivers\\fsh.sys""},{""@Name"":""ServiceType"",""#text"":""kernel mode driver""},{""@Name"":""StartType"",""#text"":""boot start""},{""@Name"":""AccountName""}]}}"
+13175,13175,2012-03-20 18:59:35.4608260,7045,Info,Service Control Manager,System,476,6640,WKS-WIN732BITA.shieldbase.local,6,S-1-5-21-2036804247-3058324640-2116585241-1114,A new service was installed in the system,,,Name: FResponse Service,StartType: demand start,Account: LocalSystem,,,,f-response-ent.exe,False,/mnt/nromanoff/Windows/System32/winevt/Logs/System.evtx,"Audi</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A35]</span> grep -E '4625' /tmp/evtx_out/security.csv | grep -iv 'SHIELDBASE\\WKS\|WIN732BITA\$\|SYSTEM\|ANONYMO</div>
+  
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A36]</span> grep -i 'vibranium' /tmp/evtx_out/security.csv | grep -E '4624|4625|4776|4672' | awk -F',' '{print $</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A36] output</summary>
+  <pre class="raw-output">526070,2012-04-03 21:02:49.0537434,4776,,
+526071,2012-04-03 21:02:49.0537434,4625,,-\-
+526074,2012-04-03 21:03:05.1789661,4672,,SHIELDBASE\vibranium (S-1-5-21-2036804247-3058324640-2116585241-1673)
+526075,2012-04-03 21:03:05.1789661,4624,,-\-
+526077,2012-04-03 21:11:07.1385908,4672,,SHIELDBASE\vibranium (S-1-5-21-2036804247-3058324640-2116585241-1673)
+526078,2012-04-03 21:11:07.1385908,4624,,-\-
+526079,2012-04-03 21:11:08.7312677,4776,,
+526080,2012-04-03 21:11:08.7322442,4625,,SHIELDBASE\WKS-WIN732BITA$
+526082,2012-04-03 21:12:04.2043928,4776,,
+526083,2012-04-03 21:12:04.2200171,4625,,-\-
+526086,2012-04-03 21:12:07.1446907,4625,,SHIELDBASE\WKS-WIN732BITA$
+526088,2012-04-03 21:13:07.8402128,4625,,-\-
+526091,2012-04-03 21:13:08.3870655,4776,,
+526092,2012-04-03 21:13:08.3870655,4625,,SHIELDBASE\WKS-WIN732BITA$
+526094,2012-04-03 21:13:28.9994479,4672,,SHIELDBASE\vibranium (S-1-5-21-2036804247-3058324640-2116585241-1673)
+526095,2012-04-03 21:13:28.9994479,4624,,-\-
+526096,2012-04-03 21:13:29.5150498,4776,,
+526097,2012-04-03 21:13:29.5150498,4625,,SHIELDBASE\WKS-WIN732BITA$
+526099,2012-04-03 21:14:55.9359344,4672,,SHIELDBASE\vibranium (S-1-5-21-2036804247-3058324640-2116585241-1673)
+526100,2012-04-03 21:14:55.9359344,4624,,-\-
+526101,2012-04-03 21:14:56.7924219,4776,,
+526102,2012-04-03 21:14:56.7924219,4625,,SHIELDBASE\WKS-WIN732BITA$
+526104,2012-04-03 21:17:55.2529220,4672,,SHIELDBASE\vibranium (S-1-5-21-2036804247-3058324640-2116585241-1673)
+526105,2012-04-03 21:17:55.2538986,4624,,-\-
+526107,2012-04-03 21:19:52.8717016,4672,,SHIELDBASE\vibranium (S-1-5-21-2036804247-3058324640-2116585241-1673)
+526108,2012-04-03 21:19:52.8717016,4624,,-\-
+526110,2012-04-03 21:19:53.7077247,4624,,SHIELDBASE\WKS-WIN732BITA$
+526111,2012-04-03 21:19:53.7077247,4624,,SHIELDBASE\WKS-WIN732BITA$
+526112,2012-04-03 21:19:53.7077247,4672,,SHIELDBASE\vibranium (S-1-5-21-2036804247-3058324640-2116585241-1673)
+526113,2012-04-03 21:20:45.3974475,4672,,SHIELDBASE\vibranium (S-1-5-21-2036804247-3058324640-2116585241-1673)
+526114,2012-04-03 21:20:45.3974475,4624,,-\-
+526141,2012-04-03 21:35:12.1603211,4672,,SHIELDBASE\vibranium (S-1-5-21-2036804247-3058324640-2116585241-1673)
+526142,2012-04-03 21:35:12.1603211,4624,,-\-
+526169,2012-04-03 22:07:43.2412476,4776,,
+526170,2012-04-03 22:07:43.3505155,4672,,SHIELDBASE\vibranium (S-1-5-21-2036804247-3058324640-2116585241-1673)
+526171,2012-04-03 22:07:43.3661252,4624,,-\-
+526173,2012-04-03 22:07:54.9231568,4776,,
+526174,2012-04-03 22:07:54.9855956,4672,,SHIELDBASE\vibranium (S-1-5-21-2036804247-3058324640-2116585241-1673)
+526175,2012-04-03 22:07:55.0324247,4624,,-\-
+526179,2012-04-03 22:08:05.5797106,4624,,SHIELDBASE\WKS-WIN732BITA$</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A37]</span> grep -E '5140' /tmp/evtx_out/security.csv | head -20</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A37] output</summary>
+  <pre class="raw-output">525140,525140,2012-04-02 00:23:16.8457478,4985,LogAlways,Microsoft-Windows-Security-Auditing,Security,4,56,WKS-WIN732BITA.shieldbase.local,15,,,,,,,,,,,,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit success,0,"{""EventData"":{""Data"":[{""@Name"":""SubjectUserSid"",""#text"":""S-1-5-18""},{""@Name"":""SubjectUserName"",""#text"":""WKS-WIN732BITA$""},{""@Name"":""SubjectDomainName"",""#text"":""SHIELDBASE""},{""@Name"":""SubjectLogonId"",""#text"":""0x3E7""},{""@Name"":""TransactionId"",""#text"":""00cac594-6eef-11e1-b947-005056a51269""},{""@Name"":""NewState"",""#text"":""52""},{""@Name"":""ResourceManager"",""#text"":""5decb1d2-95d5-11e0-aa3f-005056c00008""},{""@Name"":""ProcessId"",""#text"":""0x388""},{""@Name"":""ProcessName"",""#text"":""C:\\Windows\\System32\\svchost.exe""}]}}"
+525854,525854,2012-04-03 18:39:35.5023369,5140,LogAlways,Microsoft-Windows-Security-Auditing,Security,4,13800,WKS-WIN732BITA.shieldbase.local,21,,A network share object was accessed,WKS-WIN732BITA\SRL-Helpdesk,10.3.58.7:4508,Share: \\*\ADMIN$ (\??\C:\Windows),Sid: S-1-5-21-100689374-1717798114-2601648136-1001,AccessList: ReadData (or ListDirectory),AccessMask: Unknown code (0x1),,,,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit failure,0,"{""EventData"":{""Data"":[{""@Name"":""SubjectUserSid"",""#text"":""S-1-5-21-100689374-1717798114-2601648136-1001""},{""@Name"":""SubjectUserName"",""#text"":""SRL-Helpdesk""},{""@Name"":""SubjectDomainName"",""#text"":""WKS-WIN732BITA""},{""@Name"":""SubjectLogonId"",""#text"":""0x174A094B""},{""@Name"":""ObjectType"",""#text"":""File""},{""@Name"":""IpAddress"",""#text"":""10.3.58.7""},{""@Name"":""IpPort"",""#text"":""4508""},{""@Name"":""ShareName"",""#text"":""\\\\*\\ADMIN$""},{""@Name"":""ShareLocalPath"",""#text"":""\\??\\C:\\Windows""},{""@Name"":""AccessMask"",""#text"":""0x1""},{""@Name"":""AccessList"",""#text"":""%%4416, ""}]}}"
+525940,525940,2012-04-03 19:29:14.8243462,5140,LogAlways,Microsoft-Windows-Security-Auditing,Security,4,13800,WKS-WIN732BITA.shieldbase.local,22,,A network share object was accessed,WKS-WIN732BITA\SRL-Helpdesk,10.3.58.7:1425,Share: \\*\ADMIN$ (\??\C:\Windows),Sid: S-1-5-21-100689374-1717798114-2601648136-1001,AccessList: ReadData (or ListDirectory),AccessMask: Unknown code (0x1),,,,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit failure,0,"{""EventData"":{""Data"":[{""@Name"":""SubjectUserSid"",""#text"":""S-1-5-21-100689374-1717798114-2601648136-1001""},{""@Name"":""SubjectUserName"",""#text"":""SRL-Helpdesk""},{""@Name"":""SubjectDomainName"",""#text"":""WKS-WIN732BITA""},{""@Name"":""SubjectLogonId"",""#text"":""0x17547CFD""},{""@Name"":""ObjectType"",""#text"":""File""},{""@Name"":""IpAddress"",""#text"":""10.3.58.7""},{""@Name"":""IpPort"",""#text"":""1425""},{""@Name"":""ShareName"",""#text"":""\\\\*\\ADMIN$""},{""@Name"":""ShareLocalPath"",""#text"":""\\??\\C:\\Windows""},{""@Name"":""AccessMask"",""#text"":""0x1""},{""@N</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A38]</span> rip.pl -r '/mnt/nromanoff/Windows/System32/config/SOFTWARE' -f winlogon 2&gt;/dev/null</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A38] output</summary>
+  <pre class="raw-output">----------------------------------------</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A39]</span> stat '/mnt/nromanoff/Users/rsydow/AppData/Local/Temp/MOBCleanup.exe' 2&gt;/dev/null</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A39] output</summary>
+  <pre class="raw-output">File: /mnt/nromanoff/Users/rsydow/AppData/Local/Temp/MOBCleanup.exe
+  Size: 210272    	Blocks: 416        IO Block: 4096   regular file
+Device: 7,11	Inode: 49337       Links: 2
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2011-09-08 20:59:08.197664000 +0000
+Modify: 2011-04-04 15:07:16.000000000 +0000
+Change: 2011-09-08 20:59:08.263089500 +0000
+ Birth: -</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A40]</span> stat '/mnt/nromanoff/Users/nromanoff/Documents/Undercover Agent-List-Classified/Agents-List-CLASSIFI</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A40] output</summary>
+  <pre class="raw-output">File: /mnt/nromanoff/Users/nromanoff/Documents/Undercover Agent-List-Classified/Agents-List-CLASSIFIED-TOP-SECRET.zip
+  Size: 1035188   	Blocks: 2024       IO Block: 4096   regular file
+Device: 7,11	Inode: 54797       Links: 2
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2012-03-09 20:56:53.732004600 +0000
+Modify: 2012-03-09 20:56:00.000000000 +0000
+Change: 2012-04-04 15:21:06.753530300 +0000
+ Birth: -</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A41]</span> grep -E '5140' /tmp/evtx_out/security.csv | grep -i 'vibranium\|ADMIN\$\|IPC\$\|C\$' | head -20</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A41] output</summary>
+  <pre class="raw-output">525854,525854,2012-04-03 18:39:35.5023369,5140,LogAlways,Microsoft-Windows-Security-Auditing,Security,4,13800,WKS-WIN732BITA.shieldbase.local,21,,A network share object was accessed,WKS-WIN732BITA\SRL-Helpdesk,10.3.58.7:4508,Share: \\*\ADMIN$ (\??\C:\Windows),Sid: S-1-5-21-100689374-1717798114-2601648136-1001,AccessList: ReadData (or ListDirectory),AccessMask: Unknown code (0x1),,,,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit failure,0,"{""EventData"":{""Data"":[{""@Name"":""SubjectUserSid"",""#text"":""S-1-5-21-100689374-1717798114-2601648136-1001""},{""@Name"":""SubjectUserName"",""#text"":""SRL-Helpdesk""},{""@Name"":""SubjectDomainName"",""#text"":""WKS-WIN732BITA""},{""@Name"":""SubjectLogonId"",""#text"":""0x174A094B""},{""@Name"":""ObjectType"",""#text"":""File""},{""@Name"":""IpAddress"",""#text"":""10.3.58.7""},{""@Name"":""IpPort"",""#text"":""4508""},{""@Name"":""ShareName"",""#text"":""\\\\*\\ADMIN$""},{""@Name"":""ShareLocalPath"",""#text"":""\\??\\C:\\Windows""},{""@Name"":""AccessMask"",""#text"":""0x1""},{""@Name"":""AccessList"",""#text"":""%%4416, ""}]}}"
+525940,525940,2012-04-03 19:29:14.8243462,5140,LogAlways,Microsoft-Windows-Security-Auditing,Security,4,13800,WKS-WIN732BITA.shieldbase.local,22,,A network share object was accessed,WKS-WIN732BITA\SRL-Helpdesk,10.3.58.7:1425,Share: \\*\ADMIN$ (\??\C:\Windows),Sid: S-1-5-21-100689374-1717798114-2601648136-1001,AccessList: ReadData (or ListDirectory),AccessMask: Unknown code (0x1),,,,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit failure,0,"{""EventData"":{""Data"":[{""@Name"":""SubjectUserSid"",""#text"":""S-1-5-21-100689374-1717798114-2601648136-1001""},{""@Name"":""SubjectUserName"",""#text"":""SRL-Helpdesk""},{""@Name"":""SubjectDomainName"",""#text"":""WKS-WIN732BITA""},{""@Name"":""SubjectLogonId"",""#text"":""0x17547CFD""},{""@Name"":""ObjectType"",""#text"":""File""},{""@Name"":""IpAddress"",""#text"":""10.3.58.7""},{""@Name"":""IpPort"",""#text"":""1425""},{""@Name"":""ShareName"",""#text"":""\\\\*\\ADMIN$""},{""@Name"":""ShareLocalPath"",""#text"":""\\??\\C:\\Windows""},{""@Name"":""AccessMask"",""#text"":""0x1""},{""@Name"":""AccessList"",""#text"":""%%4416, ""}]}}"
+525941,525941,2012-04-03 19:29:15.4025082,5140,LogAlways,Microsoft-Windows-Security-Auditing,Security,4,13800,WKS-WIN732BITA.shieldbase.local,22,,A network share object was accessed,WKS-WIN732BITA\SRL-Helpdesk,10.3.58.7:1425,Share: \\*\ADMIN$ (\??\C:\Windows),Sid: S-1-5-21-100689374-1717798114-2601648136-1001,AccessList: ReadData (or ListDirectory),AccessMask: Unknown code (0x1),,,,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit failure,0,"{""EventData"":{""Data"":[{""@Name"":""SubjectUserSid"",""#text"":""S-1-5-21-100689374-1717798114-2601648136-1001""},{""@Name"":""SubjectUserName"",""#text"":""SRL-Helpdesk""},{""@Name"":""SubjectDomainName"",""#text"":""WKS-WIN732BITA""},{""@Name"":""SubjectLogonId"",""#text"":""0x17547CFD""},{""@Name"</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A42]</span> rip.pl -r '/mnt/nromanoff/Users/vibranium/NTUSER.DAT' -f shellbags 2&gt;/dev/null | head -60</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A42] output</summary>
+  <pre class="raw-output">----------------------------------------</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A43]</span> {'file_path': '/mnt/nromanoff/Users/rsydow/AppData/Local/Temp/MOBCleanup.exe', 'algorithm': 'md5'}</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A43] output</summary>
+  <pre class="raw-output">{
+  "file": "/mnt/nromanoff/Users/rsydow/AppData/Local/Temp/MOBCleanup.exe",
+  "algorithm": "md5",
+  "hash": "f4ce3c24473974a9b1ea30d9463788ce"
+}</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A44]</span> {'file_path': '/mnt/nromanoff/Users/nromanoff/Documents/Undercover Agent-List-Classified/Agents-List</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A44] output</summary>
+  <pre class="raw-output">{
+  "file": "/mnt/nromanoff/Users/nromanoff/Documents/Undercover Agent-List-Classified/Agents-List-CLASSIFIED-TOP-SECRET.zip",
+  "algorithm": "md5",
+  "hash": "9be5aabef9ddf0b4672cbeae97cb35cf"
+}</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A45]</span> strings '/mnt/nromanoff/Users/rsydow/AppData/Local/Temp/MOBCleanup.exe' 2&gt;/dev/null | head -60</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A45] output</summary>
+  <pre class="raw-output">!This program cannot be run in DOS mode.
+Rich
+.text
+`.rdata
+@.data
+.rsrc
+@.reloc
+6h@sB
+j?WVP
+jBWVP
+jJWVP
+PWWj&amp;W
+t:jh
+hHwB
+tQhHwB
+RPVQ
+YWVP
+t 9A
+t	QP
+_^[]
+@_^[
+QQSV
+tNf90tI
+VVVVj
+~0CS
+t!VVSPj
+MCRG
+@uA3
+:QZ^&amp;
+jxY+
+D$lV
+D$xPV
+L$t_^3
+&gt;MCRGt
+jph`
+JRPj
+F0_9^ tA9^$t&lt;9^(t79^,t29^0t-9^4t(9^8t#9^&lt;t
+9^@t
+9^Dt
+9^Ht
+9^Lt
+9^Pt
+QSSj
+j0Xf
+97t$
+I0S;
+VVVVj
+;~4r
+j0Zf+
+x	f+
+j}WSP
+PPj PPP
+5$AB
+=$AB
+5$AB
+t}9&gt;uyj 
+FF;t$
+FF;t$
+FFYY;t$
+FFYY;t$</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A46]</span> rip.pl -r '/mnt/nromanoff/Users/nromanoff/NTUSER.DAT' -f recentdocs 2&gt;/dev/null | head -60</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A46] output</summary>
+  <pre class="raw-output">----------------------------------------</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A47]</span> rip.pl -r '/mnt/nromanoff/Users/vibranium/NTUSER.DAT' -f recentdocs 2&gt;/dev/null | head -60</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A47] output</summary>
+  <pre class="raw-output">----------------------------------------</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A48]</span> rip.pl -r '/mnt/nromanoff/Users/vibranium/NTUSER.DAT' -f userassist 2&gt;/dev/null | head -80</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A48] output</summary>
+  <pre class="raw-output">----------------------------------------</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A49]</span> find '/mnt/nromanoff/Windows/Prefetch' -iname 'PSEXE*.pf' -o -iname 'PSEXESVC*.pf' 2&gt;/dev/null | xar</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A49] output</summary>
+  <pre class="raw-output">File: /mnt/nromanoff/Windows/Prefetch/PSEXESVC.EXE-51BA46F2.pf
+  Size: 18244     	Blocks: 40         IO Block: 4096   regular file
+Device: 7,11	Inode: 42145       Links: 2
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2012-04-03 21:11:08.811340700 +0000
+Modify: 2012-04-04 18:52:21.334774700 +0000
+Change: 2012-04-04 18:52:21.334774700 +0000
+ Birth: -</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A50]</span> strings '/mnt/nromanoff/Windows/Prefetch/PSEXESVC.EXE-51BA46F2.pf' 2&gt;/dev/null</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A50] output</summary>
+  <pre class="raw-output">SCCA</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A51]</span> strings '/mnt/nromanoff/Windows/Prefetch/A.EXE-8D56B1C4.pf' 2&gt;/dev/null</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A51] output</summary>
+  <pre class="raw-output">SCCA</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A52]</span> strings '/mnt/nromanoff/Windows/Prefetch/A.EXE-F91CBA0E.pf' 2&gt;/dev/null</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A52] output</summary>
+  <pre class="raw-output">SCCA</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A53]</span> find '/mnt/nromanoff/Windows/Prefetch' -name '*.pf' 2&gt;/dev/null | xargs -I{} sh -c 'echo "=== {} ===</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A53] output</summary>
+  <pre class="raw-output">ERROR: Command blocked — xargs command 'sh' not in forensic allowlist</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A54]</span> rip.pl -r '/mnt/nromanoff/Windows/System32/config/SOFTWARE' -f appinitdlls 2&gt;/dev/null</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A54] output</summary>
+  <pre class="raw-output">----------------------------------------</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A55]</span> rip.pl -r '/mnt/nromanoff/Windows/System32/config/SOFTWARE' -f ifeo 2&gt;/dev/null | head -40</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A55] output</summary>
+  <pre class="raw-output">----------------------------------------</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A56]</span> find '/mnt/nromanoff/Windows/Prefetch' -name '*.pf' -newer '/mnt/nromanoff/Windows/Prefetch/A.EXE-8D</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A56] output</summary>
+  <pre class="raw-output">/mnt/nromanoff/Windows/Prefetch/A.EXE-F91CBA0E.pf
+/mnt/nromanoff/Windows/Prefetch/ADOBEARM.EXE-ACA00A4A.pf
+/mnt/nromanoff/Windows/Prefetch/WERFAULT.EXE-B7E27BE5.pf
+/mnt/nromanoff/Windows/Prefetch/WERMGR.EXE-2A1BCBC7.pf
+/mnt/nromanoff/Windows/Prefetch/WINLOGON.EXE-8163EECC.pf
+/mnt/nromanoff/Windows/Prefetch/WINMAIL.EXE-D6E90604.pf
+/mnt/nromanoff/Windows/Prefetch/WMIADAP.EXE-369DF1CD.pf
+/mnt/nromanoff/Windows/Prefetch/WMIPRVSE.EXE-43972D0F.pf
+/mnt/nromanoff/Windows/Prefetch/MCTADMIN.EXE-9B12B644.pf
+/mnt/nromanoff/Windows/Prefetch/MCTRAY.EXE-B860F4E5.pf
+/mnt/nromanoff/Windows/Prefetch/MCUPDATE.EXE-FA2D18A4.pf
+/mnt/nromanoff/Windows/Prefetch/SVCHOST.EXE-135A30D8.pf
+/mnt/nromanoff/Windows/Prefetch/SVCHOST.EXE-4D8DA32A.pf
+/mnt/nromanoff/Windows/Prefetch/SVCHOST.EXE-828F70B4.pf
+/mnt/nromanoff/Windows/Prefetch/SVCHOST.EXE-8DA0BAAD.pf
+/mnt/nromanoff/Windows/Prefetch/SVCHOST.EXE-8FD92526.pf
+/mnt/nromanoff/Windows/Prefetch/SVCHOST.EXE-93CEEE07.pf
+/mnt/nromanoff/Windows/Prefetch/SVCHOST.EXE-BA833CD4.pf
+/mnt/nromanoff/Windows/Prefetch/SVCHOST.EXE-CD257EB2.pf
+/mnt/nromanoff/Windows/Prefetch/SYSTEMPROPERTIESPROTECTION.EX-47C43498.pf
+/mnt/nromanoff/Windows/Prefetch/TASKHOST.EXE-437C05A8.pf
+/mnt/nromanoff/Windows/Prefetch/SHSTAT.EXE-3E759080.pf
+/mnt/nromanoff/Windows/Prefetch/SIDEBAR.EXE-3A7B3FCC.pf
+/mnt/nromanoff/Windows/Prefetch/SMSS.EXE-1DCD0EB1.pf
+/mnt/nromanoff/Windows/Prefetch/SPINLOCK.EXE-1610A75A.pf
+/mnt/nromanoff/Windows/Prefetch/SPPSVC.EXE-CBE91656.pf
+/mnt/nromanoff/Windows/Prefetch/REG.EXE-26976709.pf
+/mnt/nromanoff/Windows/Prefetch/REGSVR32.EXE-55A4EE79.pf
+/mnt/nromanoff/Windows/Prefetch/RUNDLL32.EXE-125D4518.pf
+/mnt/nromanoff/Windows/Prefetch/RUNDLL32.EXE-17E909EA.pf
+/mnt/nromanoff/Windows/Prefetch/RUNDLL32.EXE-457BF760.pf
+/mnt/nromanoff/Windows/Prefetch/RUNDLL32.EXE-6E048FD0.pf
+/mnt/nromanoff/Windows/Prefetch/RUNDLL32.EXE-85E123DD.pf
+/mnt/nromanoff/Windows/Prefetch/RUNDLL32.EXE-935475C8.pf
+/mnt/nromanoff/Windows/Prefetch/RUNDLL32.EXE-E8194E9C.pf
+/mnt/nromanoff/Windows/Prefetch/RUNDLL32.EXE-F452D79D.pf
+/mnt/nromanoff/Windows/Prefetch/OUTLOOK.EXE-6869E875.pf
+/mnt/nromanoff/Windows/Prefetch/TASKLIST.EXE-9811F41E.pf
+/mnt/nromanoff/Windows/Prefetch/TASKMGR.EXE-72398DC0.pf
+/mnt/nromanoff/Windows/Prefetch/TRUSTEDINSTALLER.EXE-031B6478.pf</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A57]</span> rip.pl -r '/mnt/nromanoff/Windows/System32/config/SYSTEM' -f svchost2 2&gt;/dev/null | head -40</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A57] output</summary>
+  <pre class="raw-output">----------------------------------------</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A58]</span> find '/mnt/nromanoff/Users/vibranium' -type f -name '*.lnk' 2&gt;/dev/null | head -20</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A58] output</summary>
+  <pre class="raw-output">/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Internet Explorer/Quick Launch/Launch Internet Explorer Browser.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Internet Explorer/Quick Launch/Shows Desktop.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Internet Explorer/Quick Launch/User Pinned/TaskBar/Internet Explorer.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Internet Explorer/Quick Launch/User Pinned/TaskBar/Windows Explorer.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Internet Explorer/Quick Launch/User Pinned/TaskBar/Windows Media Player.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Internet Explorer/Quick Launch/Window Switcher.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/Agents-List-CLASSIFIED-TOP-SECRET.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/Carrier Landing Pad.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/CC R&amp;D Backstopped Accounts.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/CC-Backstopped-Accounts.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/clp-1.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/clp-2 - Fuel Hookup.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/Downloads.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/hq-1.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/HQ.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/Undercover-Agents-List-For-United-Kingdom.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/Undercover-Agents-List-For-United-States.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/SendTo/Fax Recipient.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Accessories/Accessibility/Ease of Access.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Accessories/Accessibility/Magnify.lnk</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A59]</span> stat '/mnt/nromanoff/Windows/Prefetch/SPINLOCK.EXE-1610A75A.pf' 2&gt;/dev/null</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A59] output</summary>
+  <pre class="raw-output">File: /mnt/nromanoff/Windows/Prefetch/SPINLOCK.EXE-1610A75A.pf
+  Size: 35678     	Blocks: 72         IO Block: 4096   regular file
+Device: 7,11	Inode: 60947       Links: 2
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2012-04-03 23:09:26.377675700 +0000
+Modify: 2012-04-04 18:55:01.772274700 +0000
+Change: 2012-04-04 18:55:01.772274700 +0000
+ Birth: -</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A60]</span> stat '/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/Agents-List-CLASSIFIED</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A60] output</summary>
+  <pre class="raw-output">File: /mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/Agents-List-CLASSIFIED-TOP-SECRET.lnk
+  Size: 1219      	Blocks: 8          IO Block: 4096   regular file
+Device: 7,11	Inode: 61983       Links: 2
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2012-04-04 15:43:17.160714700 +0000
+Modify: 2012-04-04 15:43:17.160714700 +0000
+Change: 2012-04-04 15:43:17.160714700 +0000
+ Birth: -
+  File: /mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/Undercover-Agents-List-For-United-Kingdom.lnk
+  Size: 1713      	Blocks: 8          IO Block: 4096   regular file
+Device: 7,11	Inode: 61987       Links: 2
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2012-04-04 15:43:17.145089700 +0000
+Modify: 2012-04-04 15:43:17.145089700 +0000
+Change: 2012-04-04 15:43:17.145089700 +0000
+ Birth: -
+  File: /mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/Undercover-Agents-List-For-United-States.lnk
+  Size: 1713      	Blocks: 8          IO Block: 4096   regular file
+Device: 7,11	Inode: 61982       Links: 2
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2012-04-04 15:42:58.301339700 +0000
+Modify: 2012-04-04 15:42:58.301339700 +0000
+Change: 2012-04-04 15:42:58.301339700 +0000
+ Birth: -</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A61]</span> find '/mnt/nromanoff' -iname 'spinlock.exe' 2&gt;/dev/null</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A61] output</summary>
+  <pre class="raw-output">/mnt/nromanoff/Windows/System32/spinlock.exe</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A62]</span> stat '/mnt/nromanoff/Windows/System32/spinlock.exe' 2&gt;/dev/null</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A62] output</summary>
+  <pre class="raw-output">File: /mnt/nromanoff/Windows/System32/spinlock.exe
+  Size: 2271885   	Blocks: 4440       IO Block: 4096   regular file
+Device: 7,11	Inode: 60927       Links: 1
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2012-04-03 22:59:43.146917900 +0000
+Modify: 2012-04-03 22:53:39.000000000 +0000
+Change: 2012-04-03 23:02:30.322095900 +0000
+ Birth: -</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A63]</span> {'file_path': '/mnt/nromanoff/Windows/System32/spinlock.exe', 'algorithm': 'md5'}</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A63] output</summary>
+  <pre class="raw-output">{
+  "file": "/mnt/nromanoff/Windows/System32/spinlock.exe",
+  "algorithm": "md5",
+  "hash": "6bff2aebb8852fc2658b9768d2166ece"
+}</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A64]</span> stat '/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/CC R&amp;D Backstopped Acc</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A64] output</summary>
+  <pre class="raw-output">File: /mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/CC R&amp;D Backstopped Accounts.lnk
+  Size: 956       	Blocks: 8          IO Block: 4096   regular file
+Device: 7,11	Inode: 61969       Links: 2
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2012-04-04 15:42:19.676339700 +0000
+Modify: 2012-04-04 15:42:19.676339700 +0000
+Change: 2012-04-04 15:42:19.676339700 +0000
+ Birth: -</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A65]</span> find '/mnt/nromanoff/Users/vibranium' -name '*.lnk' -newer '/mnt/nromanoff/Windows/Prefetch/A.EXE-8D</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A65] output</summary>
+  <pre class="raw-output">/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/Agents-List-CLASSIFIED-TOP-SECRET.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/Carrier Landing Pad.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/CC R&amp;D Backstopped Accounts.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/CC-Backstopped-Accounts.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/clp-1.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/clp-2 - Fuel Hookup.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/hq-1.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/HQ.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/Undercover-Agents-List-For-United-Kingdom.lnk
+/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/Undercover-Agents-List-For-United-States.lnk</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A66]</span> strings '/mnt/nromanoff/Windows/System32/spinlock.exe' 2&gt;/dev/null | head -80</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A66] output</summary>
+  <pre class="raw-output">!This program cannot be run in DOS mode.
+RichV
+.text
+`.rdata
+@.data
+.rsrc
+D$0P
+|$t+
+L$ Q
+T$4RSSSj
+D$0P
+_^][
+|$(+
+h,RA
+T$(P
+t^h,RA
+hXRA
+=(PA
+hDRA
+Y_^[
+htRA
+hhRA
+|$$Wh
+_^[3
+&lt;Mua
+D$4j
+=(PA
+h`[A
+hP[A
+h$[A
+hTZA
+h@ZA
+hpYA
+hDYA
+h,YA
+hlXA
+h`XA
+h8XA
+h(XA
+htWA
+hHWA
+h0WA
+hxVA
+hlVA
+hDVA
+h4VA
+h|UA
+hLUA
+h8UA
+h|TA
+hdTA
+h4TA
+h TA
+hpSA
+h`SA
+h8SA
+h(SA
+h&lt;\A
+5@PA
+h&lt;\A
+hP\A
+_^][
+t%hp\A
+hD]A
+h,]A
+zu	V
+hP\A
+L$DR
+L$ QPh
+T$ RPh`]A
+(SRh
+j Vh
+V Rh
+u0UV
+T$0+
+hp^A
+|$8O
+|$8+
+hp^A
+D$&lt;P</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A67]</span> strings '/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/Agents-List-CLASSIF</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A67] output</summary>
+  <pre class="raw-output">/C:\
+Users
+NROMAN~1
+DOCUME~1
+UNDERC~1
+AGENTS~1
+@]}*
+C:\Users\nromanoff\Documents\Undercover Agent-List-Classified\Agents-List-CLASSIFIED-TOP-SECRET
+1SPS
+wks-win732bita
+$2f~"
+$2f~"</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A68]</span> strings '/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/Undercover-Agents-L</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A68] output</summary>
+  <pre class="raw-output">/C:\
+Users
+NROMAN~1
+DOCUME~1
+UNDERC~1
+AGENTS~1
+@]}*
+UNDERC~4.XLS
+C:\Users\nromanoff\Documents\Undercover Agent-List-Classified\Agents-List-CLASSIFIED-TOP-SECRET\Undercover-Agents-List-For-United-States.xlsx
+1SPS
+wks-win732bita
+$2f~"
+$2f~"</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A69]</span> strings '/mnt/nromanoff/Windows/System32/spinlock.exe' 2&gt;/dev/null | grep -iE 'http|ftp|tcp|udp|sock</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A69] output</summary>
+  <pre class="raw-output">Cannot GetProcAddress for PyImport_AddModule
+PyImport_AddModule
+Cannot GetProcAddress for PyImport_ImportModule
+PyImport_ImportModule
+Cannot GetProcAddress for PyImport_ExecCodeModule
+PyImport_ExecCodeModule
+import sys
+Error in command: %s
+Please contact the application's support team for more information.
+Please contact the application's support team for more information.
+- floating point support not loaded
+.cmd
+GetCommandLineW
+GetCommandLineA
+GetCPInfo
+GetConsoleOutputCP
+80`9
+1C2a
+        &lt;requestedExecutionLevel level="asInvoker" uiAccess="false"&gt;&lt;/requestedExecutionLevel&gt;
+qC2&lt;~OZ
+d(C2;
+C2[m8
+80Eh
+a?3c2G
+W80q1
+encodings.ptcp154(
+encodings.gb18030(
+C2Do
+lkc2 
+80 (l
+DaC2
+80!;
+XXP&lt;,8 ,80,8(,
+C2|G
+-80T
+Q,c2
+80Or
+X)/c2T
+}c2/C
+S|6wC2</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A70]</span> strings '/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/CC R&amp;D Backstopped </div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A70] output</summary>
+  <pre class="raw-output">/C:\
+Users
+NROMAN~1
+DOCUME~1
+CCR&amp;DB~1
+@J}*
+C:\Users\nromanoff\Documents\CC R&amp;D Backstopped Accounts
+1SPS
+wks-win732bita
+$2f~"
+$2f~"</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A71]</span> find '/mnt/nromanoff/Users/nromanoff/Documents' -type f 2&gt;/dev/null | head -30</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A71] output</summary>
+  <pre class="raw-output">/mnt/nromanoff/Users/nromanoff/Documents/Armor Files/0071428674_Section13.pdf
+/mnt/nromanoff/Users/nromanoff/Documents/Armor Files/Adamantium.doc
+/mnt/nromanoff/Users/nromanoff/Documents/Armor Files/Adamantium.docx
+/mnt/nromanoff/Users/nromanoff/Documents/Armor Files/al_material_matters_v2n4.pdf
+/mnt/nromanoff/Users/nromanoff/Documents/Armor Files/Captain America's shield.docx
+/mnt/nromanoff/Users/nromanoff/Documents/Armor Files/Iron Man's armor.docx
+/mnt/nromanoff/Users/nromanoff/Documents/Armor Files/Nature_of_Metals_and_Alloys.pdf
+/mnt/nromanoff/Users/nromanoff/Documents/CC R&amp;D Backstopped Accounts/CC-Backstopped-Accounts.xlsx
+/mnt/nromanoff/Users/nromanoff/Documents/CC R&amp;D Backstopped Accounts/Credit-Card-Numbers-For-Research.xlsx
+/mnt/nromanoff/Users/nromanoff/Documents/Default.rdp
+/mnt/nromanoff/Users/nromanoff/Documents/desktop.ini
+/mnt/nromanoff/Users/nromanoff/Documents/Ninja Files/PDF/ninja-usenix02.pdf
+/mnt/nromanoff/Users/nromanoff/Documents/Ninja Files/PDF/ninjarules.pdf
+/mnt/nromanoff/Users/nromanoff/Documents/Ninja Files/PDF/rolllikeaninja.pdf
+/mnt/nromanoff/Users/nromanoff/Documents/Ninja Files/PDF/The Historical Ninja.pdf
+/mnt/nromanoff/Users/nromanoff/Documents/Ninja Files/PPT/ninja.ppt
+/mnt/nromanoff/Users/nromanoff/Documents/Ninja Files/PPT/Ninjas.ppt
+/mnt/nromanoff/Users/nromanoff/Documents/Ninja Files/PPT/Samurai And Ninja project.pptx
+/mnt/nromanoff/Users/nromanoff/Documents/Ninja Files/PPT/simple-nomad-csw2002.ppt
+/mnt/nromanoff/Users/nromanoff/Documents/Ninja Files/PPT/StickNinja.ppt
+/mnt/nromanoff/Users/nromanoff/Documents/Outlook Files/nromanoff@stark-research-labs.com.pst
+/mnt/nromanoff/Users/nromanoff/Documents/Undercover Agent-List-Classified/Agents-List-CLASSIFIED-TOP-SECRET/Undercover-Agents-List-For-Australia.xls
+/mnt/nromanoff/Users/nromanoff/Documents/Undercover Agent-List-Classified/Agents-List-CLASSIFIED-TOP-SECRET/Undercover-Agents-List-For-Spain.xlsx
+/mnt/nromanoff/Users/nromanoff/Documents/Undercover Agent-List-Classified/Agents-List-CLASSIFIED-TOP-SECRET/Undercover-Agents-List-For-United-Kingdom.xls
+/mnt/nromanoff/Users/nromanoff/Documents/Undercover Agent-List-Classified/Agents-List-CLASSIFIED-TOP-SECRET/Undercover-Agents-List-For-United-States.xlsx
+/mnt/nromanoff/Users/nromanoff/Documents/Undercover Agent-List-Classified/Agents-List-CLASSIFIED-TOP-SECRET.zip</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A72]</span> stat '/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/CC-Backstopped-Account</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A72] output</summary>
+  <pre class="raw-output">File: /mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/CC-Backstopped-Accounts.lnk
+  Size: 1287      	Blocks: 8          IO Block: 4096   regular file
+Device: 7,11	Inode: 61968       Links: 2
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2012-04-04 15:42:19.645089700 +0000
+Modify: 2012-04-04 15:42:19.645089700 +0000
+Change: 2012-04-04 15:42:19.645089700 +0000
+ Birth: -
+/C:\
+Users
+NROMAN~1
+DOCUME~1
+CCR&amp;DB~1
+@J}*
+CC-BAC~1.XLS
+C:\Users\nromanoff\Documents\CC R&amp;D Backstopped Accounts\CC-Backstopped-Accounts.xlsx
+1SPS
+wks-win732bita
+$2f~"
+$2f~"</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A73]</span> stat '/mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/Carrier Landing Pad.ln</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A73] output</summary>
+  <pre class="raw-output">File: /mnt/nromanoff/Users/vibranium/AppData/Roaming/Microsoft/Windows/Recent/Carrier Landing Pad.lnk
+  Size: 1119      	Blocks: 8          IO Block: 4096   regular file
+Device: 7,11	Inode: 61945       Links: 2
+Access: (0777/-rwxrwxrwx)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2012-04-04 15:36:56.316964700 +0000
+Modify: 2012-04-04 15:36:56.316964700 +0000
+Change: 2012-04-04 15:36:56.316964700 +0000
+ Birth: -
+/C:\
+Users
+NROMAN~1
+Pictures
+NEW-SI~1
+CARRIE~1
+C:\Users\nromanoff\Pictures\New-Site-HQ-And-Landing-Pad\Carrier Landing Pad
+1SPS
+wks-win732bita
+$2f~"
+$2f~"</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A74]</span> grep -i 'vibranium\|SRL-Help' /tmp/evtx_out/security.csv | grep '4663' | head -20</div>
+  <details class="raw-output-details">
+  <summary class="raw-output-summary">[A74] output</summary>
+  <pre class="raw-output">526599,526599,2012-04-04 02:22:42.0467674,4663,LogAlways,Microsoft-Windows-Security-Auditing,Security,4,56,WKS-WIN732BITA.shieldbase.local,29,,Attempt was made to access an object,SHIELDBASE\vibranium,,ObjectServer: Security,ObjectType: File,ObjectName: C:\Windows\Boot,"AccessList: Unknown code (%%1538, )",,,C:\Windows\explorer.exe,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit success,0,"{""EventData"":{""Data"":[{""@Name"":""SubjectUserSid"",""#text"":""S-1-5-21-2036804247-3058324640-2116585241-1673""},{""@Name"":""SubjectUserName"",""#text"":""vibranium""},{""@Name"":""SubjectDomainName"",""#text"":""SHIELDBASE""},{""@Name"":""SubjectLogonId"",""#text"":""0x8EBBD""},{""@Name"":""ObjectServer"",""#text"":""Security""},{""@Name"":""ObjectType"",""#text"":""File""},{""@Name"":""ObjectName"",""#text"":""C:\\Windows\\Boot""},{""@Name"":""HandleId"",""#text"":""0xD78""},{""@Name"":""AccessList"",""#text"":""%%1538, ""},{""@Name"":""AccessMask"",""#text"":""0x20000""},{""@Name"":""ProcessId"",""#text"":""0xDA8""},{""@Name"":""ProcessName"",""#text"":""C:\\Windows\\explorer.exe""}]}}"
+526600,526600,2012-04-04 02:22:42.0477407,4663,LogAlways,Microsoft-Windows-Security-Auditing,Security,4,56,WKS-WIN732BITA.shieldbase.local,29,,Attempt was made to access an object,SHIELDBASE\vibranium,,ObjectServer: Security,ObjectType: File,ObjectName: C:\Windows\Boot,"AccessList: Unknown code (%%1538, )",,,C:\Windows\explorer.exe,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit success,0,"{""EventData"":{""Data"":[{""@Name"":""SubjectUserSid"",""#text"":""S-1-5-21-2036804247-3058324640-2116585241-1673""},{""@Name"":""SubjectUserName"",""#text"":""vibranium""},{""@Name"":""SubjectDomainName"",""#text"":""SHIELDBASE""},{""@Name"":""SubjectLogonId"",""#text"":""0x8EBBD""},{""@Name"":""ObjectServer"",""#text"":""Security""},{""@Name"":""ObjectType"",""#text"":""File""},{""@Name"":""ObjectName"",""#text"":""C:\\Windows\\Boot""},{""@Name"":""HandleId"",""#text"":""0xD78""},{""@Name"":""AccessList"",""#text"":""%%1538, ""},{""@Name"":""AccessMask"",""#text"":""0x20000""},{""@Name"":""ProcessId"",""#text"":""0xDA8""},{""@Name"":""ProcessName"",""#text"":""C:\\Windows\\explorer.exe""}]}}"
+526601,526601,2012-04-04 02:22:42.0487140,4663,LogAlways,Microsoft-Windows-Security-Auditing,Security,4,56,WKS-WIN732BITA.shieldbase.local,29,,Attempt was made to access an object,SHIELDBASE\vibranium,,ObjectServer: Security,ObjectType: File,ObjectName: C:\Windows\Boot,"AccessList: Unknown code (%%1538, )",,,C:\Windows\explorer.exe,False,/mnt/nromanoff/Windows/System32/winevt/Logs/Security.evtx,Audit success,0,"{""EventData"":{""Data"":[{""@Name"":""SubjectUserSid"",""#text"":""S-1-5-21-2036804247-3058324640-2116585241-1673""},{""@Name"":""SubjectUserName"",""#text"":""vibranium""},{""@Name"":""SubjectDomainName"",""#text"":""SHIELDBASE""},{""@Name"":""SubjectLogonId"",""#text"":""0x8EBBD""},{""@Name"":""ObjectServer"",""#text"":""Security""},{""@Nam</pre>
+</details>
+</div>
+<div class="log-entry">
+  <div class="log-cmd"><span class="log-num">[A75]</span> grep '4663' /tmp/evtx_out/security.csv | grep 'vibranium' | grep -i 'Undercover\|Classified\|CC R\|B</div>
+  
+</div></div>
+</section>
+
+  <footer class="report-footer">
+    <span>ADVERSA — Adversarial Signal Learning Framework</span>
+    <span>Generated: 2026-05-27 03:07:33 UTC</span>
+  </footer>
+
+</div>
+</body>
+</html>

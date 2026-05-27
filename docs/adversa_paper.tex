@@ -723,23 +723,32 @@ T1569.002 & PsExec (System Services)    & disk \\
 \end{table}
 
 Key physical artifacts: \texttt{spinlock.exe}---a PyInstaller-bundled
-Python backdoor, a distinct tool family from the httppump variants
-seen on nfury and tdungan. Spinlock established a TLS connection to
-an external C2 at \texttt{199.73.28.114:443} presenting a self-signed
-certificate with \texttt{CN=199.73.28.114}---the only confirmed
-external command-and-control node in the campaign. \texttt{PSEXESVC.EXE}
-was confirmed on disk (T1569.002), and Volatility~3
-\texttt{windows.hashdump} extracted credentials from the
-\texttt{vibranium} account. T1055 was confirmed in memory via
-anonymous \texttt{PAGE\_EXECUTE\_READWRITE} VAD regions.
+Python~2.5 backdoor (\texttt{python25.dll}, temp dir
+\texttt{\_MEI29562\textbackslash}), a distinct tool family from the
+httppump variants on nfury and tdungan. The execution chain was
+recovered from memory: \texttt{a.exe} (PID~3264, dropped to
+\texttt{vibranium\textbackslash AppData\textbackslash Local\textbackslash Temp})
+$\to$ \texttt{cmd.exe} $\to$ \texttt{spinlock.exe}, subsequently
+re-launched via \texttt{PSEXESVC.EXE} into SYSTEM context (T1569.002).
+\texttt{spinlock.exe} established a TLS connection to an external C2
+at \texttt{199.73.28.114:443} presenting a self-signed certificate with
+\texttt{CN=199.73.28.114}---the only confirmed external C2 node in the
+campaign. A rogue \texttt{svchost.exe} at
+\texttt{system32\textbackslash dllhost\textbackslash svchost.exe}
+(the same masquerade path as tdungan) bound to
+\texttt{127.0.0.1:5678} was also active in memory.
+\texttt{windows.hashdump} returned
+\texttt{SRL-Helpdesk: 4c3f5e9fe4c8fc2f99d47cbb25d7d193}---the
+identical hash seen on nfury and tdungan, confirming the attacker
+planted and reused this service account across all three hosts.
+T1055 was confirmed via an anonymous \texttt{PAGE\_EXECUTE\_READWRITE}
+VadS region in \texttt{LogonUI.exe}.
 
-Refuted (4): four memory-only signals with no disk corroboration---the
-identical refutation pattern seen on both nfury and tdungan. The
-consistency across three independent host investigations is not
-coincidental: it reflects the Auditor's discrimination criterion
-operating uniformly.
+Refuted (4): T1071.001, T1134, T1547.001, T1574---all memory-only
+signals with no disk corroboration, the identical refutation pattern
+seen on both nfury and tdungan.
 
-Total runtime: $\approx$880\,s ($\approx$15\,min); total cost: $\approx$\$14.
+Total runtime: 692\,s ($\approx$11.5\,min); total cost: $\approx$\$10.
 
 \subsection{Cross-Host Campaign Correlation}
 \label{sec:campaign}
@@ -762,21 +771,24 @@ distinct from the variant on tdungan (SHA-256: \texttt{91f16fc5\ldots},
 hashes, same C2---consistent with an operator deploying evolved
 tooling across lateral movement targets.
 
-\textbf{SRL-Helpdesk NTLM hash identical on both hosts.}
+\textbf{SRL-Helpdesk NTLM hash identical on all three hosts.}
 Volatility~3 \texttt{windows.hashdump} returned
 \texttt{SRL-Helpdesk: 4c3f5e9fe4c8fc2f99d47cbb25d7d193}
-on both nfury and tdungan. An identical NTLM hash for an
-attacker-created service account across two separate domain hosts
-is conclusive evidence of credential reuse from a single operator.
+on nfury, tdungan, and nromanoff. An identical NTLM hash for an
+attacker-created service account across three separate domain hosts
+is conclusive evidence of a single operator deploying a shared
+credential pool across the campaign.
 
-\textbf{IOC propagation confirmed.} The \texttt{a.exe} filename IOC
-extracted from nfury was recognised as a priority signal during the
-tdungan investigation; \texttt{A.EXE-239305EA.pf} and
-\texttt{A.EXE-0F3A0E12.pf} prefetch entries (multiple hashes,
-multiple runs) confirmed staged payload delivery on tdungan.
-This is the campaign mode delivering its intended output---a confirmed
-IOC on one host shortens the tool-call budget required to verify the
-same tooling on the next.
+\textbf{IOC propagation confirmed across all three hosts.}
+The \texttt{a.exe} filename IOC extracted from nfury was recognised
+as a priority signal during the tdungan investigation;
+\texttt{A.EXE-239305EA.pf} and \texttt{A.EXE-0F3A0E12.pf} prefetch
+entries confirmed staged payload delivery on tdungan.
+\texttt{a.exe} also appears in nromanoff's IOC set---the same dropper
+filename, different binaries, three hosts. This is the campaign mode
+delivering its intended output: a confirmed IOC on one host shortens
+the tool-call budget required to verify the same tooling on subsequent
+hosts.
 
 \textbf{Phishing as campaign initial access.} T1566 was confirmed
 on tdungan and absent on nfury. tdungan is the patient-zero host;
