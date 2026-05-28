@@ -70,3 +70,5 @@ custom-agent/reports/
 
 # Docs build output
 docs/reports/
+mordor_cache.json
+custom-agent/mordor_cache.json
