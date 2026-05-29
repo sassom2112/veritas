@@ -1,18 +1,18 @@
 ---
 title: Project Story
-nav_order: 4
+nav_order: 5
 permalink: /story
 ---
 
-# ADVERSA — Adversarial Forensic Verification for Windows Incident Response
+# VERITAS — Adversarial Forensic Verification for Windows Incident Response
 
-**SANS FIND EVIL! Hackathon 2026 | Persistent Learning Loop**
+**SANS FIND EVIL! Hackathon 2026 | Custom MCP Server · Multi-Agent Adversarial Pipeline**
 
-**15 of 19** MITRE techniques confirmed on nfury &nbsp;·&nbsp;
-**800+** labeled malware samples in corpus &nbsp;·&nbsp;
+**32 confirmed** across 48 detected, 4 hosts &nbsp;·&nbsp;
+**16 correctly refuted** — exactly 4 per host, every host &nbsp;·&nbsp;
 **100%** of confirmed findings with physical artifact citation &nbsp;·&nbsp;
-**4-layer** MCP security boundary &nbsp;·&nbsp;
-**16 minutes · $14** per full disk + memory investigation
+**4-gate** MCP security boundary, architecturally enforced &nbsp;·&nbsp;
+**~$14** per full disk + memory investigation
 
 ---
 
@@ -24,19 +24,21 @@ A senior examiner sitting at a SIFT workstation does not lack tools or knowledge
 
 The question we set out to answer: **can we compress Time-to-Understanding from 48 hours to under 30 minutes without sacrificing forensic integrity?**
 
+The speed-only framing misses what actually matters. An autonomous investigator that runs in 8 minutes and hallucinates credential dumping that never happened does not help a responder — it hands them a false incident timeline that will fail the moment a defense attorney or regulator asks to see the supporting artifact. Speed without verifiability is noise at machine velocity. The SIFT community built this platform for practitioners who need findings that survive legal scrutiny. VERITAS is the architecture that makes autonomous investigation forensically defensible, not just fast.
+
 The harder question we did not expect to face: **can we prevent the AI itself from manufacturing the findings we asked it to find?**
 
 LLMs hallucinate because they are trained to be helpful. Ask one whether credential dumping occurred on a disk image and it will find something that looks like credential dumping — whether or not the binary is actually on disk. The standard answer is prompt engineering: tell the model to be skeptical.
 
 An LLM-based security agent also faces a direct adversarial threat: an attacker who can write to logs, craft alert metadata, or control filesystem artifacts can influence what the agent sees and concludes. Prompt-level guardrails are the equivalent of a standard classifier without adversarial hardening — they work until the adversary pushes past the margin. The architectural answer at the model level is adversarial training with separation between clean and adversarial loss. The architectural answer at the system level is the same kind of separation: agents that receive findings but not reasoning, auditors that have a mandate to refute rather than confirm, tool servers that validate before any subprocess executes.
 
-ADVERSA is built around a different premise. **A finding is only CONFIRMED when a second independent agent — one instructed to distrust the first — calls a forensic tool and reads the actual bytes off the disk.** If the file is not there, the technique is refuted. No amount of model confidence changes that.
+VERITAS is built around a different premise. **A finding is only CONFIRMED when a second independent agent — one instructed to distrust the first — calls a forensic tool and reads the actual bytes off the disk.** If the file is not there, the technique is refuted. No amount of model confidence changes that.
 
 ---
 
 ## What It Does
 
-ADVERSA investigates any mounted Windows forensic image through a four-phase pipeline, fully autonomous from invocation to HTML report.
+VERITAS investigates any mounted Windows forensic image through a four-phase pipeline, fully autonomous from invocation to HTML report.
 
 **Phase 1 — Deterministic triage.** Approximately 25 generic SIFT commands run in under 60 seconds with no LLM involvement. The image is scored against corpus-calibrated signal weights: log-odds ratios computed from 800+ labeled malware samples sourced from MalwareBazaar and HybridAnalysis, covering 9 MITRE ATT&CK techniques. Every command is invariant across investigations — nothing from a previous case contaminates the baseline sweep. The triage net is deliberately wide; the Auditor narrows it.
 
@@ -52,7 +54,7 @@ Confirmed IOCs propagate automatically to subsequent host investigations. The sa
 
 ## How We Built It
 
-**Signal weights from real malware, not hand-authored rules.**
+**Corpus-calibrated signal weights from real malware, not hand-authored rules.**
 Detection signals are weighted using log-odds ratios:
 
 ```
@@ -62,7 +64,10 @@ weight   = normalize(log_odds) → [0, 1]
 
 800+ labeled samples from MalwareBazaar and HybridAnalysis provide the malware frequency estimates. A curated benign baseline of common Windows system strings provides the denominator. Cross-technique tokens are dampened (IDF-equivalent). Signals from confirmed cases retain a floor weight. Every weight is traceable to a source SHA256 — not a model parameter, not an analyst's intuition.
 
-Sysmon-domain signals trained adversarially on 49,519 real OTRF/Mordor events supplement this corpus. A Red Agent evolves evasion variants; a Blue Agent extracts discriminating field values from misses. These rules fire on Sysmon telemetry-adjacent artifacts but carry a documented domain gap on raw disk forensic output — acknowledged, not claimed as disk-validated.
+**Adversarial training for Sysmon telemetry — a future detection layer.**
+A Red Agent and Blue Agent run 3,000 iterations against 49,519 real Windows Sysmon events from the OTRF Mordor dataset. The Red Agent generates evasion mutations; the Blue Discriminator extracts discriminating field values from every miss and hardens its rules. 2,031 logged evasion attempts. Each exported Sigma rule embeds its per-variant bypass rate.
+
+These rules are validated on live Sysmon telemetry and not yet fully applicable to static disk forensic output — Sysmon event fields like ProcessGuid and CommandLine are absent from dead-disk artifacts. The adversarial training infrastructure is operational; connecting it to a live endpoint telemetry path is the next engineering step.
 
 **One tool, four security layers.**
 Every forensic action flows through a single MCP primitive: `run_terminal_command`. Behind it is a four-gate validator enforced in Python before any subprocess call:
@@ -159,7 +164,7 @@ Refuted (4): T1134, T1547.001, T1569.002, T1574 — memory-only signals, no disk
 
 **Decoupling passes eliminates anchoring bias.** Passing triage results into the investigative pass creates a model that confirms what it was told to look for. Passing only raw artifacts creates a model that reasons from evidence. The difference in output quality was immediately measurable.
 
-**Generic signals and case IOCs are fundamentally different things.** A signal that fires on `psexesvc` in a malware corpus generalizes. A signal that fires on `199.73.28.114` is a case-specific IOC. Baking IOCs into the detection layer inflates scores on familiar images without generalizing to new ones. ADVERSA separates these explicitly — corpus weights are generic, IOC files are opt-in at runtime.
+**Generic signals and case IOCs are fundamentally different things.** A signal that fires on `psexesvc` in a malware corpus generalizes. A signal that fires on `199.73.28.114` is a case-specific IOC. Baking IOCs into the detection layer inflates scores on familiar images without generalizing to new ones. VERITAS separates these explicitly — corpus weights are generic, IOC files are opt-in at runtime.
 
 **Two validated hosts, consistent auditor behavior.** nfury: 15/19 confirmed, 4 refuted. tdungan: 13/17 confirmed, 4 refuted. Both runs showed the same pattern — memory-only signals refuted, disk-corroborated findings confirmed. The auditor is not case-specific; it applies the same physical verification standard regardless of host.
 
@@ -167,7 +172,7 @@ Refuted (4): T1134, T1547.001, T1569.002, T1574 — memory-only signals, no disk
 
 ## What's Next
 
-**Second case validation.** nfury is one data point. The honest next step is running the current system on a host it has never seen and measuring false positive rate, missed techniques, and auditor correction rate independently.
+**Novel campaign validation.** Three hosts from one campaign (nfury, tdungan, nromanoff) share an operator, C2 infrastructure, and tooling variants. The architecture generalizes across hosts within the same campaign — including detecting that nromanoff used a distinct tool family (spinlock vs. httppump). The honest next step is running against a second campaign with completely different tooling and measuring false positive rate, missed techniques, and auditor correction rate without any prior IOC seeding.
 
 **Technique coverage expansion.** Corpus weights cover 9 MITRE techniques. The MalwareBazaar and HybridAnalysis APIs can scale this to 50+ with additional corpus collection runs.
 
@@ -175,4 +180,4 @@ Refuted (4): T1134, T1547.001, T1569.002, T1574 — memory-only signals, no disk
 
 **Memory-resident technique coverage.** Techniques that deliberately avoid disk artifacts require memory-first analysis. The Volatility 3 path exists; expanding it to cover process hollowing, DKOM, and kernel rootkit signatures is the next engineering target.
 
-**Neural network detection with an audit admissibility layer.** TrueAllele DNA mixture interpretation and COMPAS recidivism scoring have already been challenged in court on black-box grounds — defendants argued that the inability to inspect model internals violated due process. A deep neural network trained on real Sysmon telemetry would outperform log-odds ratios on detection rate, but its weights cannot be explained in a chain-of-custody review. ADVERSA's Forensic Auditor is the direct answer: a black-box detection model can be deployed as the triage layer if, and only if, every flagged finding is subsequently verified by an Auditor that reads physical bytes off disk and produces an artifact citation traceable to a specific tool call. The neural network provides the detection rate. The Auditor provides the admissibility. This is not a workaround — it is the correct architecture for forensic AI that will survive legal challenge.
+**Neural network detection with an audit admissibility layer.** TrueAllele DNA mixture interpretation and COMPAS recidivism scoring have already been challenged in court on black-box grounds — defendants argued that the inability to inspect model internals violated due process. A deep neural network trained on real Sysmon telemetry would outperform log-odds ratios on detection rate, but its weights cannot be explained in a chain-of-custody review. VERITAS's Forensic Auditor is the direct answer: a black-box detection model can be deployed as the triage layer if, and only if, every flagged finding is subsequently verified by an Auditor that reads physical bytes off disk and produces an artifact citation traceable to a specific tool call. The neural network provides the detection rate. The Auditor provides the admissibility. This is not a workaround — it is the correct architecture for forensic AI that will survive legal challenge.

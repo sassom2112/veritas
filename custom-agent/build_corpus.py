@@ -2,7 +2,7 @@
 from __future__ import annotations
 """
 build_corpus.py — Collect labeled malware samples from MalwareBazaar + HybridAnalysis
-and build a signal corpus for compute_weights.py to calibrate ADVERSA's scoring engine.
+and build a signal corpus for compute_weights.py to calibrate VERITAS's scoring engine.
 
 Usage:
     export MB_API_KEY=<your-key>      # MalwareBazaar (free, register at abuse.ch)
@@ -283,7 +283,7 @@ def save_corpus(corpus: dict) -> None:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Build ADVERSA signal corpus from MalwareBazaar + HybridAnalysis'
+        description='Build VERITAS signal corpus from MalwareBazaar + HybridAnalysis'
     )
     parser.add_argument('--technique', nargs='+',
                         metavar='TID',
@@ -307,7 +307,7 @@ def main():
         print("   Set HA_API_KEY or pass --no-ha to suppress this message")
 
     print(f"\n{'═'*60}")
-    print(f"  ADVERSA Corpus Builder")
+    print(f"  VERITAS Corpus Builder")
     print(f"  MB limit per tag: {args.limit}  |  HA enrichment: {'yes' if ha_key else 'no'}")
     print(f"{'═'*60}")
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-html_report.py -- Self-contained HTML report generator for ADVERSA investigations.
+html_report.py -- Self-contained HTML report generator for VERITAS investigations.
 
 Reads:  reports/{host}-auditor-transcript.json
         reports/{host}-custom-agent-report.json
@@ -79,7 +79,6 @@ def _finding_card(f: dict) -> str:
     confirmed  = verdict == 'CONFIRMED'
     tid        = _esc(f.get('finding_id', ''))
     name       = _esc(f.get('finding_name', ''))
-    weight     = f.get('triage_weight', 0)
     signals    = _esc(', '.join(f.get('triage_signals', [])))
     convergence = _esc(f.get('convergence_reason', '').replace('_', ' '))
     rounds     = f.get('challenges', [])
@@ -92,9 +91,9 @@ def _finding_card(f: dict) -> str:
                   'inconclusive-card'  if is_inconclusive else 'refuted-card')
     badge_txt  = ('✓ CONFIRMED'        if confirmed else
                   '? INCONCLUSIVE'     if is_inconclusive else '✗ REFUTED')
-    weight_cls = 'finding-weight' if confirmed else 'finding-weight refuted-weight'
-    weight_txt = (f'+{weight} pts' if confirmed else
-                  '? unverified'   if is_inconclusive else f'−{weight} pts')
+    status_cls = 'finding-weight' if confirmed else 'finding-weight refuted-weight'
+    status_txt = ('artifact verified'  if confirmed else
+                  'not located'        if is_inconclusive else 'no artifact found')
 
     rounds_html = '\n'.join(_round_html(r) for r in rounds)
     tools_line  = (
@@ -123,7 +122,7 @@ def _finding_card(f: dict) -> str:
       <span class="finding-tid">{tid}</span>
       <span class="finding-name">{name}</span>
     </div>
-    <span class="{weight_cls}">{weight_txt}</span>
+    <span class="{status_cls}">{status_txt}</span>
   </div>
   <div class="finding-signals">Triage signals: <span class="signal-list">{signals}</span></div>
   {tools_line}
@@ -570,14 +569,14 @@ def generate_report(host: str, reports_dir: str) -> str:
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>ADVERSA — {_esc(host)}</title>
+  <title>VERITAS — {_esc(host)}</title>
   <style>{_CSS}</style>
 </head>
 <body>
 <div class="page-wrap">
 
   <header class="report-header">
-    <div class="report-title">ADVERSA · Adversarial Signal Learning · Investigation Report</div>
+    <div class="report-title">VERITAS · Forensic Investigation Report</div>
     <div class="report-host">{_esc(str(target))}</div>
     <div class="report-meta">
       <span>{_esc(ts)}</span>
@@ -594,11 +593,11 @@ def generate_report(host: str, reports_dir: str) -> str:
     </div>
     <div class="verdict-right">
       <div class="score-pair">
-        <span style="color:var(--dim)">{triage_score}</span>
-        <span class="score-arrow">→</span>
-        <span style="color:{vc}">{adjusted_score}</span>
+        <span style="color:#3fb950">{len(confirmed)} confirmed</span>
+        <span class="score-arrow">·</span>
+        <span style="color:#f85149">{len(refuted)} refuted</span>
       </div>
-      <div class="score-label">Triage → Audited Score</div>
+      <div class="score-label">Auditor Verdicts</div>
     </div>
   </div>
 
@@ -629,7 +628,7 @@ def generate_report(host: str, reports_dir: str) -> str:
   {pass2_log_section}
 
   <footer class="report-footer">
-    <span>ADVERSA — Adversarial Signal Learning Framework</span>
+    <span>VERITAS — Adversarial Signal Learning Framework</span>
     <span>Generated: {_esc(ts)}</span>
   </footer>
 

@@ -1,7 +1,7 @@
 """
-Cross-validate ADVERSA operational rules against Splunk EVTX-ATTACK-SAMPLES data.
+Cross-validate VERITAS operational rules against Splunk EVTX-ATTACK-SAMPLES data.
 
-This script runs ADVERSA's trained detection rules against a second, independent
+This script runs VERITAS's trained detection rules against a second, independent
 dataset — the EVTX-ATTACK-SAMPLES CSV used by the Splunk Agentic IR project.
 A rule "detects" if any of its signals match a case-insensitive substring in the
 event text of events belonging to that technique's tactic category.
@@ -43,7 +43,7 @@ _SEARCH_FIELDS = [
     "ObjectName",
 ]
 
-# Map ADVERSA technique IDs → expected EVTX_Tactic labels (partial match)
+# Map VERITAS technique IDs → expected EVTX_Tactic labels (partial match)
 _TACTIC_MAP: dict[str, list[str]] = {
     "T1003.001": ["credential", "cred"],
     "T1547.001": ["persistence"],
@@ -189,7 +189,7 @@ def validate(rules: dict, events: list[dict]) -> dict:
 def print_table(report: dict) -> None:
     s = report["summary"]
     print(f"\n{'=' * 66}")
-    print(f"  ADVERSA Rules × EVTX-ATTACK-SAMPLES Cross-Validation")
+    print(f"  VERITAS Rules × EVTX-ATTACK-SAMPLES Cross-Validation")
     print(f"{'=' * 66}")
     print(f"  Dataset    : {s['dataset']}")
     print(f"  Rules      : {s['rules_tested']} total, {s['asl_eligible_rules']} with asl_trained signals")

@@ -1,8 +1,8 @@
 {
-  "description": "Example agent execution log showing ADVERSA dual-agent pipeline structure. All host, case, and IOC data is synthetic. Timestamps and token counts are representative of real runs.",
+  "description": "Example agent execution log showing VERITAS dual-agent pipeline structure. All host, case, and IOC data is synthetic. Timestamps and token counts are representative of real runs.",
   "host": "example-host",
   "pipeline": "Triage Agent -> Forensic Auditor",
-  "framework": "ADVERSA — Adversarial Signal Learning",
+  "framework": "VERITAS — Adversarial Signal Learning",
   "generated": "2026-05-19T00:00:00Z",
 
   "phase1_triage": {

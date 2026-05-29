@@ -1,6 +1,6 @@
 ---
 title: nfury Investigation
-nav_order: 3
+nav_order: 6
 permalink: /nfury
 ---
 
@@ -31,7 +31,7 @@ Full disk + memory pipeline. 15 confirmed, 4 refuted. 16 minutes. $14.
 <div class="report-frame-wrap">
   <iframe
     src="/docs/nfury-report.html"
-    title="nfury ADVERSA Investigation Report"
+    title="nfury VERITAS Investigation Report"
     scrolling="yes"
     loading="lazy">
   </iframe>

@@ -1,4 +1,4 @@
-"""ADVERSA CLI — human-only approval workflow.
+"""VERITAS CLI — human-only approval workflow.
 
 Commands:
   adversa review [case_dir]              List findings with DRAFT/APPROVED status
@@ -26,7 +26,7 @@ _CONFIG_PATH = Path.home() / ".adversa" / "config.yaml"
 
 
 def _get_examiner() -> str:
-    env = os.environ.get("ADVERSA_EXAMINER", "").strip().lower()
+    env = os.environ.get("VERITAS_EXAMINER", "").strip().lower()
     return env if env else getpass.getuser().strip().lower()
 
 
@@ -47,7 +47,7 @@ def cmd_review(args: argparse.Namespace) -> None:
 
     width = 72
     print(f"\n{'─' * width}")
-    print(f"  ADVERSA Case Review: {case_dir.name}")
+    print(f"  VERITAS Case Review: {case_dir.name}")
     print(f"  {len(findings)} finding(s)")
     print(f"{'─' * width}")
 
@@ -270,7 +270,7 @@ def cmd_report(args: argparse.Namespace) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="adversa",
-        description="ADVERSA — forensic investigation approval CLI",
+        description="VERITAS — forensic investigation approval CLI",
     )
     sub = parser.add_subparsers(dest="command", help="Commands")
 
@@ -297,7 +297,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_verify.set_defaults(func=cmd_verify)
 
     # config
-    p_config = sub.add_parser("config", help="Configure ADVERSA settings")
+    p_config = sub.add_parser("config", help="Configure VERITAS settings")
     p_config.add_argument("--setup-password", action="store_true",
                           help="Set up approval password")
     p_config.set_defaults(func=cmd_config)

@@ -1,5 +1,5 @@
 """
-Cross-validate ADVERSA operational rules against Elastic IR Agent's ECS-formatted
+Cross-validate VERITAS operational rules against Elastic IR Agent's ECS-formatted
 EVTX-ATTACK-SAMPLES dataset (ir-agent/data/processed/evtx_events.jsonl).
 
 Same methodology as validate_against_evtx.py:
@@ -36,7 +36,7 @@ _SEARCH_FIELDS = [
     "winlog.event_data.ServiceName",
 ]
 
-# ADVERSA technique → Elastic threat.tactic.name values
+# VERITAS technique → Elastic threat.tactic.name values
 _TACTIC_MAP: dict[str, list[str]] = {
     "T1003.001": ["credential access"],
     "T1547.001": ["persistence"],
@@ -195,7 +195,7 @@ def validate(rules: dict, events: list[dict]) -> dict:
 def print_table(report: dict) -> None:
     s = report["summary"]
     print(f"\n{'=' * 70}")
-    print(f"  ADVERSA Rules × Elastic IR Agent EVTX Data — Cross-Validation")
+    print(f"  VERITAS Rules × Elastic IR Agent EVTX Data — Cross-Validation")
     print(f"{'=' * 70}")
     print(f"  Dataset  : {s['dataset']}")
     print(f"  Events   : {s['total_events']:,}")

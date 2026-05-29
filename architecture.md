@@ -1,128 +1,133 @@
 ---
 title: Architecture
-nav_order: 3
+nav_order: 4
 permalink: /architecture
 ---
 
 # Architecture
 
-ADVERSA uses a **5-layer pipeline** pattern with a strict trust boundary at Layer 3 (the MCP Validator Gate).
+Two agents. Zero shared state. One rule: `CONFIRMED` requires a positive tool return.
 
-<div class="mermaid">
-graph TD
-    subgraph L0["🧠 LAYER 0: Adversarial Simulation Core (Offline)"]
-        direction TB
-        DS[("mordor_dataset\nTelemetry Warehouse\n49,519 Sysmon events · 9 techniques")]
-        subgraph Engine["Mutation Loop"]
-            RED["Red Agent\n(msticpy_red_agent.py)"]
-            ENRICH["Event Enrichment\n(msticpy_enrichment.py)\nIP · registry · process context"]
-            EVOLVE["Evasion Logic\nArtifact Mutation"]
-            RED <-->|Mutate Signatures| EVOLVE
-            RED --> ENRICH
-        end
-        BLU["Blue Discriminator\n(brain.py :: BlueDiscriminator)"]
-        PDB[("pattern_db.py\nSQLite Storage\nhit / miss signal weights")]
-        RULES[("operational_rules.json\nHardened Rule Set\n11 rules · 3,000 iterations")]
-        DS --> RED
-        Engine -->|Sysmon events + enrichment| BLU
-        BLU -->|record detection| PDB
-        PDB -->|signal weight update| BLU
-        BLU -->|export static TTP weights| RULES
-    end
-    subgraph L1["⚙️ LAYER 1: Orchestration & Session Execution"]
-        direction LR
-        SH["adversa.sh\nCLI Entry Point"]
-        ORCH["investigate.py\nState Manager"]
-        SH --> ORCH
-    end
-    RULES -->|Runtime Ingestion| ORCH
-    subgraph L2["🤖 LAYER 2: Forensic Agency Tier"]
-        direction TB
-        subgraph AGENT_1["Phase 1 — Triage Agent  (blue_agent.py)"]
-            P1["Pass 1 · Deterministic Sweep\n~25 SIFT Commands · under 60s"]
-            SCORE["ASL Scoring Engine\nweighted signal match"]
-            P2["Pass 2 · Agentic Loop\n75 tool-call budget"]
-            P1 --> SCORE --> P2
-        end
-        subgraph AGENT_2["Phase 2 — Forensic Auditor  (auditor_agent.py)"]
-            PAR["asyncio.gather\nIsolated MCP session per technique"]
-            RND["5 rounds x 2 tools each\nCONFIRMED / REFUTED / INCONCLUSIVE"]
-            ADJ["Adjusted Score\n= sum of confirmed technique weights"]
-            PAR --> RND --> ADJ
-        end
-        AGENT_1 -->|Triage Findings Report| AGENT_2
-    end
-    ORCH --> AGENT_1
-    API(["Anthropic API\nclaude-sonnet-4-6"])
-    P2 <-->|tool_use loop| API
-    RND <-->|tool_use loop| API
-    subgraph L3["🛡️ LAYER 3: MCP Security Boundary  (sift_server.py)  ← ARCHITECTURAL ENFORCEMENT"]
-        direction TB
-        RTC["run_terminal_command\nCore Execution Primitive"]
-        UTL["run_volatility\nsearch_ioc\ncompute_file_hash"]
-        GATE{"Validator Gate\n1. Hard-blocked strings · 22 tokens\n2. Binary allowlist · 53 tools\n3. Quote-aware pipe split\n4. Redirect guard → reports/ only"}
-        RTC --> GATE
-        UTL --> GATE
-    end
-    P1 -->|stdio Transport| RTC
-    P2 -->|stdio Transport| RTC
-    RND -->|stdio Transport| RTC
-    subgraph L4["🖥️ LAYER 4: Host OS & Evidence Interface"]
-        direction LR
-        BIN["SIFT Binaries\nvol.py · rip.pl · strings · fls · icat\nyara · md5sum · xxd · grep · find"]
-        IMG[("Mounted Forensic Image\n/mnt/host\nRead-Only Target")]
-        BIN --> IMG
-    end
-    GATE -->|Validated Native Invocation| BIN
-    subgraph L5["📦 LAYER 5: Output & Campaign Management"]
-        direction LR
-        HTML["html_report.py\nhost-report.html"]
-        JLOG[("JSONL Audit Log\nChain of Custody")]
-        IOCX["extract_iocs.py\nhost-iocs.json"]
-        MERGE["adversa-merge-iocs.sh\ncampaign IOC dedup"]
-    end
-    AGENT_2 --> HTML
-    AGENT_2 --> IOCX
-    GATE -.->|Atomic Append| JLOG
-    IOCX -->|Accumulate threat intel| MERGE
-    MERGE -.->|Dynamic IOC injection| SH
-    subgraph LEGEND["Security Boundary Key"]
-        direction LR
-        PB["🟡 PROMPT-BASED\nOperator instructions\nAgent system prompts\nModel can ignore"]
-        AB["🔴 ARCHITECTURAL\nMCP Validator Gate\nCode-enforced — model cannot override"]
-    end
-    classDef l0Style fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px;
-    classDef l2Style fill:#e8eaf6,stroke:#3f51b5,stroke-width:2px;
-    classDef l3Style fill:#ffebee,stroke:#f44336,stroke-width:3px;
-    classDef l4Style fill:#e1f5fe,stroke:#03a9f4,stroke-width:2px;
-    classDef l5Style fill:#e8f5e9,stroke:#4caf50,stroke-width:2px;
-    classDef promptStyle fill:#fff9c4,stroke:#f9a825,stroke-width:2px;
-    classDef archStyle fill:#ffebee,stroke:#c62828,stroke-width:3px;
-    class L0,Engine l0Style;
-    class L2,AGENT_1,AGENT_2 l2Style;
-    class L3,GATE l3Style;
-    class L4,BIN l4Style;
-    class L5,HTML,JLOG,IOCX,MERGE l5Style;
-    class PB promptStyle;
-    class AB,GATE archStyle;
-</div>
+---
+
+## The Pipeline
+
+```
+Mounted Disk Image (read-only)
+        |
+        v
++---------------------------+
+|    Deterministic Sweep    |  ~25 SIFT commands, no LLM, <60s
+|    (fast_triage.py)       |  corpus-calibrated signal weights
++---------------------------+
+        |
+        v
++---------------------------+
+|    Triage Agent           |  75-call Claude budget
+|    "The Optimist"         |  reads raw artifacts only — no scores, no labels
+|    (blue_agent.py)        |
++---------------------------+     +---------------------------+
+        |                         |  Memory Analysis          |
+        |                         |  Volatility 3 (parallel)  |
+        |                         |  (memory_agent.py)        |
+        |                         +---------------------------+
+        |  findings list only          |
+        |  (technique IDs, nothing else)|
+        +------------------------------+
+        v
++---------------------------+
+|    Forensic Auditor       |  isolated MCP session, no shared state
+|    "The Cynic"            |  mandate: assume every finding is false
+|    (auditor_agent.py)     |  5 rounds x 2 tool calls per technique
++---------------------------+
+        |
+        v
+  CONFIRMED / REFUTED / INCONCLUSIVE
+  + append-only audit log (audit_log.jsonl)
+  + HTML report
+```
+
+**The structural guarantee:** The Auditor receives technique IDs and nothing else from the Triage Agent's session. `CONFIRMED` requires a positive tool return value. Timeout returns `INCONCLUSIVE` — never `CONFIRMED`.
 
 ---
 
 ## Architectural Pattern
 
-**Multi-agent pipeline with adversarial verification** — two Claude agents share zero session state. The Triage Agent (Optimist) proposes findings; the Forensic Auditor (Cynic) independently re-runs tool calls to verify. A CONFIRMED verdict requires a positive tool return value, not model confidence.
+**Custom MCP Server + Multi-Agent Framework**
+
+A purpose-built MCP server exposes typed forensic functions rather than a generic shell. Two Claude agents run in completely separate MCP sessions with zero shared state. The Triage Agent proposes findings. The Forensic Auditor independently re-runs tool calls to verify. A `CONFIRMED` verdict requires a positive tool return — not model confidence. The agents physically cannot run destructive commands because the MCP server does not expose them.
+
+---
 
 ## Security Boundaries
 
 | Boundary | Type | Enforcement |
 |----------|------|-------------|
-| Operator instructions (CLAUDE.md) | **Prompt-based** | Model can ignore; MCP layer is the real backstop |
-| Agent system prompts | **Prompt-based** | Model can ignore; Auditor independence enforced by separate session |
-| MCP Validator Gate (Layer 3) | **Architectural** | Code-enforced in Python before `subprocess.run()`; model cannot override |
-| Binary allowlist | **Architectural** | 53 approved SIFT tools; any other binary rejected at the gate |
-| Redirect guard | **Architectural** | `os.path.realpath()` checked; no writes outside `reports/` |
-| Auditor independence | **Architectural** | Separate `asyncio` task, separate MCP session, no shared state with Triage Agent |
+| Operator instructions / system prompts | Prompt-based | Model can ignore |
+| MCP Validator Gate (4 gates) | **Architectural** | Python-enforced before any `subprocess.run()` |
+| Binary allowlist | **Architectural** | 53 approved SIFT tools — unknown binaries rejected |
+| Redirect guard | **Architectural** | `os.path.realpath()` — no writes outside `reports/` |
+| Auditor independence | **Architectural** | Separate MCP session, separate asyncio task, no shared state |
 
-<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
-<script>mermaid.initialize({startOnLoad:true, theme:'dark'});</script>
+---
+
+## The MCP Validator Gate
+
+Every forensic action flows through one primitive: `run_terminal_command`. Four gates execute in Python before any subprocess call:
+
+**Gate 1 — Argument injection prevention**
+22 hard-blocked tokens: destructive ops (`shred`, `mkfs`), exfil tools (`curl`, `wget`, `nc`), privilege escalation (`sudo`), and command substitution (`` $() ``, backtick). An approved binary can still be weaponized if attacker-controlled log content injects shell metacharacters into its arguments.
+
+**Gate 2 — Deny-all binary enforcement**
+53-binary SIFT allowlist. Every binary not on the list is rejected unconditionally. `sed` is excluded — its `-e` flag passes the pattern space to the shell.
+
+**Gate 3 — Quote-aware pipeline parser**
+Each pipe segment validated after tracking single-quoted substrings. `grep -iE '(http|https|ftp)'` passes correctly — `|` inside quotes is argument content, not a separator.
+
+**Gate 4 — Write-target guard**
+All `>`, `>>`, `tee` targets resolved via `os.path.realpath()`. Must resolve inside `reports/`. Symlink and `../` attacks fail at the path arithmetic level.
+
+Every command is atomically appended to `audit_log.jsonl` via `os.open + os.write` **before** `subprocess.run` is called. Evidence modification is structurally impossible.
+
+---
+
+## Auditor Independence
+
+The Forensic Auditor receives:
+- A JSON list of technique IDs
+
+The Forensic Auditor does **not** receive:
+- The Triage Agent's tool call history
+- The Triage Agent's reasoning or analysis
+- Confidence scores or weights
+- Any context from the Triage Agent's MCP session
+
+This is enforced by the code, not a prompt. Reading `auditor_agent.py` verifies the property.
+
+---
+
+## Campaign IOC Propagation
+
+After a host is investigated, confirmed artifacts are extracted to a structured JSON file. Only Auditor-confirmed artifacts — nothing the Auditor rejected.
+
+```bash
+# Investigate second host with first host's confirmed IOCs injected
+python3 custom-agent/investigate.py --case ~/cases/tdungan nfury
+```
+
+The IOC file injects into the deterministic sweep of the next host — no LLM, no API call. Hallucinations from the first host cannot contaminate the second investigation because they never made it into the IOC file.
+
+---
+
+## Detection Layer — Proof of Concept
+
+The triage layer generates candidates for the Auditor. It is not the architectural contribution.
+
+| Component | What it does | Status |
+|-----------|-------------|--------|
+| `fast_triage.py` | ~25 SIFT commands, corpus-calibrated weights, <10s, no API key | POC |
+| `blue_agent.py` Pass 2 | 75-call Claude loop, raw artifacts only, no labels | Working |
+| `memory_agent.py` | Volatility 3 parallel path | Working |
+| Corpus weights | Log-odds from 800+ MalwareBazaar/HybridAnalysis samples | POC, 9 MITRE techniques |
+
+The roadmap replaces corpus weights with a neural network trained against a validated benign baseline. The Auditor architecture is unchanged — any detection signal feeds the same verification layer.

@@ -1,6 +1,6 @@
 ---
 title: tdungan Investigation
-nav_order: 5
+nav_order: 7
 permalink: /tdungan
 ---
 
@@ -32,7 +32,7 @@ T1566 Phishing confirmed as campaign initial access. SRL-Helpdesk NTLM matches n
 <div class="report-frame-wrap">
   <iframe
     src="/docs/tdungan-report.html"
-    title="tdungan ADVERSA Investigation Report"
+    title="tdungan VERITAS Investigation Report"
     scrolling="yes"
     loading="lazy">
   </iframe>

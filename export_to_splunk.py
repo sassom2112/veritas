@@ -1,10 +1,10 @@
 """
-Export ADVERSA investigation IOCs as a Splunk SPL search.
+Export VERITAS investigation IOCs as a Splunk SPL search.
 
 Usage:
     python export_to_splunk.py reports/<hostname>-iocs.json [--index INDEX]
 
-Generates a ready-to-paste SPL query that hunts for ADVERSA-confirmed
+Generates a ready-to-paste SPL query that hunts for VERITAS-confirmed
 IOCs in a Splunk windows_events index.
 
 Requires the Splunk Agentic IR project to be present at:
@@ -34,7 +34,7 @@ def _import_bridge():
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("iocs_json", type=Path, help="Path to ADVERSA iocs.json output")
+    p.add_argument("iocs_json", type=Path, help="Path to VERITAS iocs.json output")
     p.add_argument("--index", default="windows_events", help="Splunk index name")
     p.add_argument("--out", type=Path, default=None, help="Save SPL to file instead of stdout")
     args = p.parse_args()

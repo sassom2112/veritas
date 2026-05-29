@@ -1,209 +1,103 @@
 ---
 title: Accuracy & Evidence Integrity
-nav_order: 5
+nav_order: 10
 permalink: /accuracy
 ---
 
 # Accuracy & Evidence Integrity
 
-> **Scope note:** The training metrics below cover the **Sysmon ASL component** (`brain.py`) —
-> the adversarial Red/Blue loop trained on 49,519 real Windows Sysmon events from the OTRF Mordor
-> datasets. This is one signal source in the pipeline. The other is corpus-calibrated log-odds
-> weights derived from 800+ malware samples (`data/calibrated_weights.json`).
-> Investigation-level results are on the [main page](/).
-
-## Sysmon ASL Training Metrics (3,000 Iterations)
-
-| Metric | Value |
-|--------|-------|
-| Total training iterations | 3,000 |
-| Detection rate (recall) | 75% |
-| Precision | 69% |
-| F1 score | 0.72 |
-| Total attack events tested | 2,122 |
-| Total detections | 1,592 |
-| Total misses | 530 |
-| False positives | 725 / 878 benign events |
-| Red evasion variants survived | 1,245 |
-| Signals learned autonomously | 83 |
-
-### Per-Technique Results
-
-| Technique | Name | Detection Rate | Patterns Learned | Red Evasions |
-|-----------|------|---------------|-----------------|--------------|
-| T1547.001 | Registry Run Key | 70% | 7 | 148 |
-| T1036.005 | Masquerading | **81%** | 7 | 171 |
-| T1003.001 | Credential Dumping | 73% | 10 | 159 |
-| T1569.002 | PsExec | **82%** | 9 | 173 |
-| T1087.001 | Account Discovery | 74% | **22** | 162 |
-| T1059.001 | PowerShell/VBS Exec | 71% | 10 | 139 |
-| T1560.001 | Archive Collected Data | 74% | 6 | 145 |
-| T1548.002 | UAC Bypass | 76% | 9 | 148 |
-
-T1071.001 (C2 Web Protocol) uses IOC-based protected signals and is not counted
-in the autonomous-learning metrics above.
+The primary accuracy claim in VERITAS is not a detection rate. It is a verification
+guarantee: **every CONFIRMED finding is backed by a positive return value from a real
+forensic tool call.** The numbers below are evidence for that claim.
 
 ---
 
-## Learning Progression
+## Forensic Auditor Results — 4 Hosts
 
-Detection rate measured at key iteration checkpoints. All measurements are on
-real OTRF/Mordor Sysmon events — not simulated data.
+| Host | Candidates | Confirmed | Refuted | Inconclusive |
+|------|-----------|-----------|---------|--------------|
+| nfury (10.3.58.6) | 19 | 15 | 4 | 0 |
+| tdungan (10.3.58.7) | 17 | 13 | 4 | 0 |
+| nromanoff (10.3.58.5) | 7 | 3 | 4 | 0 |
+| rocba (192.168.1.5) | 5 | 1 | 4 | 0 |
+| **Total** | **48** | **32** | **16** | **0** |
 
-| Checkpoint | Detection Rate | Notes |
-|-----------|---------------|-------|
-| Iteration 10 | ~10% | Domain gap — real Sysmon telemetry loaded; synthetic patterns useless |
-| Iteration 50 | ~28% | Blue Agent begins discovering registry field patterns |
-| Iteration 100 | ~41% | First stable signals in T1569.002 and T1003.001 |
-| Iteration 200 | ~52% | Cross-technique signal sharing starts; T1036.005 rises |
-| Iteration 500 | ~62% | Red evasion variants forcing Blue Agent to diversify signals |
-| Iteration 1,000 | ~68% | Signal pruning removes noise; protected IOC signals stabilise |
-| Iteration 1,500 | ~71% | F1 reported at 0.72; 4 techniques above 70% |
-| Iteration 2,000 | ~73% | T1036.005 and T1569.002 break 80% |
-| Iteration 3,000 | **75%** | Final weights; 22 signals for T1087.001 (highest diversity) |
+**100% of confirmed findings** have a physical artifact citation traceable to a specific
+tool call in the append-only audit log. Every confirmed technique can be independently
+reproduced with one shell command on the same mounted image.
 
-**Key insight**: The jump from 10% to 41% occurred autonomously with no human
-intervention — the adversarial loop self-corrects by having the Red Agent evolve
-evasions when caught and the Blue Agent add new signals when it misses. No human
-labels, feature engineering, or model retraining was performed.
+**Exactly 4 refutals per host** across all four investigations — three victim machines and
+a C2 relay node, two different tool families. The Auditor applies the same verification
+standard regardless of host type.
 
 ---
 
-## Grounded Learning: No Hallucination
+## The Refutals Are the Evidence
 
-This is an architectural guarantee, not a configuration setting.
+The 16 refuted findings are not failures. They are the architecture working.
 
-The Blue Agent learns patterns from real Sysmon events by extracting signal strings
-that are **literally present in the raw JSON event**. Claude is given the raw event
-dict and asked to extract the field values it observes. If a value is not in the
-event, Claude cannot fabricate it because the scoring function does exact substring
-matching against the actual artifact string.
+The same four techniques were refuted on every host: T1071.001, T1134, T1547.001, T1574.
+All four are memory-resident signals with no disk corroboration. The Auditor consistently
+distinguishes between a memory keyword match and a confirmed physical artifact.
 
-The Red Agent (`MordorRedAgent`) draws artifacts exclusively from the JSONL files —
-it never generates synthetic text. The artifact string passed to the Blue Agent is
-a field-formatted slice of a real Sysmon record.
+**T1071.001 on nfury — the clearest case:**
+Memory triage flagged active C2 web protocol from the string `established` in netscan
+output. The Auditor ran `windows.netscan` and checked all 432 connection records. Every
+ESTABLISHED and CLOSE\_WAIT connection resolved to Apple, Microsoft, or Google CDN
+infrastructure. Returned REFUTED: no active HTTP/HTTPS C2 connections found.
 
-**Result**: Every signal in `reports/operational_rules.json` traces directly to a
-field value observed in real Mordor telemetry. There are no hallucinated IOCs.
+**T1547.001 on nfury — exhaustive checking:**
+Memory triage flagged registry Run key persistence. The Auditor checked the SOFTWARE hive,
+SAM, SECURITY, BCD, Syscache, and 11 NTUSER.DAT files across all user profiles over three
+challenge rounds. The only Run key entries: Windows Sidebar entries dated 2009-07-14 —
+the stock Windows 7 installation timestamp. Returned REFUTED: signal fired on the key path
+in memory, not on a malicious value in the key.
 
----
-
-## Evidence Integrity Architecture
-
-The project enforces forensic evidence integrity at multiple layers:
-
-### Layer 1: Filesystem Access Control (CLAUDE.md)
-
-Operator instructions prohibit any write to `/cases/`, `/mnt/`, `/media/`, or
-`evidence/` directories. All output is routed to `./analysis/`, `./exports/`,
-or `./reports/`.
-
-### Layer 2: MCP Command Validation (sift_server.py)
-
-Every shell command executed by the Blue Agent passes through a four-stage validator.
-This is **architectural enforcement**, not prompt-based — the model cannot override it:
-
-1. **Hard-blocked substrings** — `shred`, `mkfs`, `dd if=/dev/zero`, `wget`, `curl`,
-   `nc`, `ssh`, `scp`, `sudo`, `kill`, `$(`, backtick — 22 tokens total, blocked
-   unconditionally, regardless of context.
-
-2. **Binary allowlist** — Each pipeline segment (split on `|`) must start with a
-   binary from a hardcoded frozenset of forensic tools (53 entries: `grep`, `fls`,
-   `vol.py`, `rip.pl`, `strings`, `md5sum`, `xxd`, etc.). Unlisted binaries (`rm`,
-   `chmod`, `xargs`, etc.) are rejected.
-
-3. **Quote-aware pipe parser** — Pipes inside quoted strings are not treated as
-   segment boundaries, preventing injection via `"cmd1 | rm -rf"`-style arguments.
-
-4. **Path-restricted redirection** — Any `>` or `>>` redirection target is resolved
-   with `os.path.realpath()`. The resolved path must fall inside the `_REPORTS`
-   directory. Redirections to `/dev/null`, `../` traversals, and evidence paths
-   are blocked.
-
-All validation decisions are written to an atomic audit log via `os.O_APPEND`
-for chain-of-custody integrity.
-
-### Prompt-Based vs Architectural Guardrails
-
-| Guardrail | Type | What happens if model ignores it? |
-|-----------|------|-----------------------------------|
-| CLAUDE.md operator instructions (no writes to `/cases/`) | **Prompt-based** | If the model ignores the instruction, the MCP validator (Layer 2) still blocks any `>` redirect targeting `/cases/` or `/mnt/`. The architectural layer provides the actual protection. |
-| Agent system prompts ("only report confirmed findings") | **Prompt-based** | A hallucinated finding that bypasses the agent's own skepticism will still be challenged by the Forensic Auditor, which independently runs SIFT commands. If the artifact is not on disk, the technique is marked INCONCLUSIVE or REFUTED. |
-| MCP binary allowlist | **Architectural** | Cannot be overridden by any prompt. Enforced in Python before `subprocess.run()`. |
-| MCP redirect guard | **Architectural** | Cannot be overridden by any prompt. `os.path.realpath()` resolves symlinks before the path check. |
-| Auditor independence | **Architectural** | The Auditor opens a separate MCP session with no shared state with the Triage Agent. A CONFIRMED verdict requires a positive `grep`/`find` result — no amount of model confidence produces CONFIRMED without a tool return value. |
-
-### Layer 3: Read-Only Dataset Access
-
-`MordorRedAgent` opens all JSONL files in read mode. The training loop writes
-learned state only to `reports/brain_state.json` and `reports/patterns.db`.
-
-### Layer 4: Protected Signals
-
-Forensically confirmed IOCs (C2 IPs, known tool names, confirmed account names)
-are stored as `protected_signals` in `brain_state.json`. The signal pruning step
-— which removes low-hit-rate signals — explicitly skips protected signals. They
-cannot be removed by the adaptive training loop even if they appear in benign
-contexts due to evasion.
+**T1055 on rocba — fail-safe under resource pressure:**
+Round 1: `windows.malfind` timed out after 120 seconds. Returned INCONCLUSIVE — not
+CONFIRMED. Round 2: recovered one VAD record before timeout. `MsMpEng.exe` with two
+`PAGE_EXECUTE_READWRITE` VadS regions and x64 shellcode prologue. Returned CONFIRMED.
+Timeout produces INCONCLUSIVE, not a hallucinated finding.
 
 ---
 
-## False Positive Analysis
+## Triage Layer Honest Assessment
 
-FP rate: 725 false positives on 878 benign events (~83% raw FP rate).
+The corpus-calibrated detection layer is a **proof of concept**.
 
-This number looks alarming but reflects deliberate training trade-offs:
+| Metric | Value | Context |
+|--------|-------|---------|
+| Pass 1 contribution to candidates | 2 of 48 | Corpus weights, deterministic sweep |
+| Pass 2 contribution to candidates | 46 of 48 | Agentic investigation |
+| Techniques confirmed by Auditor | 32 of 48 (67%) | Auditor is the precision layer |
+| Techniques refuted by Auditor | 16 of 48 (33%) | Correct — memory signals without disk evidence |
+| MITRE techniques in corpus weights | 9 | MalwareBazaar + HybridAnalysis signals |
+| FP rate on benign endpoints | High | Designed for known-suspicious images, not live monitoring |
 
-1. **Additive scoring**: The scoring engine sums weights from all matching techniques.
-   A single benign event that contains one word matching any signal across all 8
-   techniques contributes to the FP count.
-
-2. **Threshold calibration**: At the `HIGH` confidence threshold (score ≥ 70),
-   precision rises significantly — the FP rate on combined scores is lower than
-   the per-signal rate suggests.
-
-3. **Context is available**: `blue_agent.py` presents a structured breakdown of
-   which signals matched with what weights. An analyst can review the signal list
-   to determine whether a positive is genuine or coincidental.
-
-4. **Trade-off is intentional**: In a forensic IR context, a missed true positive
-   (attacker not detected) has higher cost than a false positive (analyst reviews
-   a benign event). The training rewards detection rate over precision.
-
-The two-pass self-correction in `blue_agent.py` partially mitigates FPs by
-running deeper targeted scans only when the score is ambiguous (30–70), allowing
-the agent to either confirm or dismiss partial matches before escalating.
-
-On nfury, the Forensic Auditor processed 9 flagged techniques and refuted 7 — techniques scored by the Triage Agent for which no physical artifact was found on disk. Two survived: T1003.002 (SAM credential dump) and T1055 (process injection). All refutals were caught without human review.
+The triage layer is deliberately wide. The Auditor provides the precision.
 
 ---
 
-## Spoliation Testing
+## Sysmon Adversarial Training — Honest Scope
 
-**Was the evidence boundary tested?** Observationally, during live investigation runs.
+The adversarial Red/Blue training loop (`brain.py`) operates on Sysmon live telemetry.
+Sysmon event fields (`ProcessGuid`, `CommandLine`, `ParentImage`) are absent from static
+disk forensic output. These signals do not independently drive disk-forensic detections
+in the current pipeline. The deployment path for this component is a live Sysmon endpoint.
 
-During the nfury investigation, the evidence directories (`/mnt/`, `/cases/`) were monitored for writes. No writes were observed. All output was routed to `reports/` as designed.
+Technical details are documented in [Domain Gap Analysis](/docs/domain_gap_results).
 
-### What the architecture guarantees (and how to verify)
+---
 
-The `_validate_command()` function in `sift_server.py` is the enforcement point.
-To verify it independently:
+## Evidence Integrity
 
-```python
-# Any command targeting /mnt or /cases is rejected by the redirect guard
-from sift_server import _validate_command
-_validate_command("grep foo /mnt/host > /mnt/host/out.txt")  # raises ValueError
-_validate_command("rm -rf /mnt/host")                         # rejected by allowlist
-_validate_command("grep foo /mnt/host | tee /tmp/x")          # 'tee' not on allowlist
-```
+Every confirmed finding is reproducible without the AI:
 
-### Documented limitation
+1. Open `reports/audit_log.jsonl`
+2. Find the Auditor tool call for the confirmed technique
+3. Run the exact command on the same mounted image
+4. The output matches
 
-The operator-level prompt restrictions (CLAUDE.md: "never write to /cases/") are
-**prompt-based**, not architectural. If the MCP validator were disabled, these
-restrictions would be the only barrier, and they can be ignored by the model. This
-is the honest failure mode. The architectural Layer 2 validator exists precisely
-because prompt-based restrictions are insufficient as the sole protection.
-
-No deliberate adversarial bypass testing of the prompt-only configuration was
-performed during this hackathon submission. That remains future work.
+The audit log is append-only — written via `os.open + os.write` before each
+`subprocess.run` call. It cannot be overwritten through a tool call. Blocked commands
+log their `blocked_reason`. The chain of custody is complete from invocation to verdict.

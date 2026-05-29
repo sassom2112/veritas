@@ -1,6 +1,6 @@
 ---
 title: nromanoff Investigation
-nav_order: 6
+nav_order: 8
 permalink: /nromanoff
 ---
 
@@ -33,7 +33,7 @@ External C2 confirmed at `199.73.28.114:443` with self-signed TLS cert — the o
 <div class="report-frame-wrap">
   <iframe
     src="/docs/nromanoff-report.html"
-    title="nromanoff ADVERSA Investigation Report"
+    title="nromanoff VERITAS Investigation Report"
     scrolling="yes"
     loading="lazy">
   </iframe>

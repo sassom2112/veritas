@@ -1,4 +1,4 @@
-"""Case file I/O for ADVERSA investigations.
+"""Case file I/O for VERITAS investigations.
 
 Creates and manages the case directory structure:
   ~/adversa-cases/{host}/
@@ -84,7 +84,7 @@ def _protected_write(path: Path, content: str) -> None:
 
 
 def get_examiner() -> str:
-    env = os.environ.get("ADVERSA_EXAMINER", "").strip().lower()
+    env = os.environ.get("VERITAS_EXAMINER", "").strip().lower()
     if env:
         _validate_examiner(env)
         return env
@@ -100,7 +100,7 @@ def get_examiner() -> str:
 def init_case(host: str, cases_dir: str | None = None) -> Path:
     """Create or open the case directory for a host. Returns Path."""
     _validate_case_id(host)
-    base = Path(cases_dir or os.environ.get("ADVERSA_CASES_DIR", DEFAULT_CASES_DIR))
+    base = Path(cases_dir or os.environ.get("VERITAS_CASES_DIR", DEFAULT_CASES_DIR))
     case_dir = base / host
     case_dir.mkdir(parents=True, exist_ok=True)
     (case_dir / "audit").mkdir(exist_ok=True)

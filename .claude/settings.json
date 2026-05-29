@@ -22,5 +22,10 @@
         ]
       }
     ]
+  },
+  "permissions": {
+    "allow": [
+      "Read(//tmp/nfury/**)"
+    ]
   }
 }

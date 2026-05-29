@@ -107,13 +107,13 @@ def callout(c, cx_box, box_mid_y, label, lines):
 
 # ─────────────────────────────────────────────────────────────────────────────
 c = canvas.Canvas(OUT, pagesize=A4)
-c.setTitle("ADVERSA Guardrails — Anti-Hallucination Trust Chain & MCP Security Boundary")
+c.setTitle("VERITAS Guardrails — Anti-Hallucination Trust Chain & MCP Security Boundary")
 
 # ── Title bar ─────────────────────────────────────────────────────────────────
 TH = 22
 rbox(c, 0, PAGE_H - TH, PAGE_W, TH, NAVY, NAVY, r=0)
 ct(c, PAGE_W/2, PAGE_H - TH + 6.5,
-   "ADVERSA Architecture: Anti-Hallucination Trust Chain & MCP Security Boundary",
+   "VERITAS Architecture: Anti-Hallucination Trust Chain & MCP Security Boundary",
    'Helvetica-Bold', 10, white)
 c.setStrokeColor(ORANGE)
 c.setLineWidth(2)
@@ -339,7 +339,7 @@ guar_bot = y - GURH
 c.setFont('Helvetica-Oblique', 6)
 c.setFillColor(GRAY_FG)
 c.drawCentredString(PAGE_W/2, guar_bot - 12,
-    "ADVERSA Guardrails — Anti-Hallucination Trust Chain & MCP Security Boundary  "
+    "VERITAS Guardrails — Anti-Hallucination Trust Chain & MCP Security Boundary  "
     "·  github.com/sassom2112/adversa")
 
 c.save()

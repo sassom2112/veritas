@@ -505,7 +505,7 @@ class ForensicBrain:
             for t, d in self.blue.patterns.items():
                 self.metrics['weights'][t].append(d['weight'])
             
-            # ── ADVERSARIAL LEARNING ────────────────────────────
+            # ── VERITASRIAL LEARNING ────────────────────────────
             if technique_id == 'BENIGN':
                 if detected:
                     print("   ⚠️  False positive on benign event — penalizing firing signals")

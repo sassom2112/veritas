@@ -1,4 +1,4 @@
-"""Tests for ADVERSA case I/O module."""
+"""Tests for VERITAS case I/O module."""
 
 from __future__ import annotations
 
@@ -22,8 +22,8 @@ from adversa.case_io import (
 
 @pytest.fixture
 def case_dir(tmp_path, monkeypatch):
-    monkeypatch.setenv("ADVERSA_CASES_DIR", str(tmp_path))
-    monkeypatch.setenv("ADVERSA_EXAMINER", "analyst")
+    monkeypatch.setenv("VERITAS_CASES_DIR", str(tmp_path))
+    monkeypatch.setenv("VERITAS_EXAMINER", "analyst")
     d = tmp_path / "nfury"
     d.mkdir()
     (d / "audit").mkdir()
@@ -66,18 +66,18 @@ _SAMPLE_TRANSCRIPT = [
 
 class TestInitCase:
     def test_creates_directory(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("ADVERSA_CASES_DIR", str(tmp_path))
+        monkeypatch.setenv("VERITAS_CASES_DIR", str(tmp_path))
         d = init_case("nfury")
         assert d.is_dir()
         assert (d / "audit").is_dir()
 
     def test_rejects_path_traversal(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("ADVERSA_CASES_DIR", str(tmp_path))
+        monkeypatch.setenv("VERITAS_CASES_DIR", str(tmp_path))
         with pytest.raises(CaseError):
             init_case("../evil")
 
     def test_idempotent(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("ADVERSA_CASES_DIR", str(tmp_path))
+        monkeypatch.setenv("VERITAS_CASES_DIR", str(tmp_path))
         init_case("nfury")
         init_case("nfury")   # second call must not raise
 

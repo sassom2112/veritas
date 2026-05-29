@@ -2,7 +2,7 @@
   "generated": "2026-05-27T03:35:08.911503+00:00",
   "target": "/mnt/nfury",
   "memory_path": "/home/sansforensics/cases/nfury/win7-64-nfury-memory/win7-64-nfury-memory-raw.001",
-  "framework": "ADVERSA \u2014 Adversarial Signal Learning",
+  "framework": "VERITAS \u2014 Adversarial Signal Learning",
   "pipeline": "Disk+Memory Triage -> Forensic Auditor",
   "elapsed_s": 669.2,
   "triage": {

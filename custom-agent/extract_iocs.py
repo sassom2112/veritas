@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-extract_iocs.py — Extract confirmed IOCs from a completed ADVERSA investigation.
+extract_iocs.py — Extract confirmed IOCs from a completed VERITAS investigation.
 
 Reads the triage report + auditor transcript for a host and writes a structured
 IOC JSON file that can be passed to subsequent investigations via --ioc-file.
@@ -251,7 +251,7 @@ def merge_iocs(*ioc_files: str) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Extract confirmed IOCs from a completed ADVERSA investigation'
+        description='Extract confirmed IOCs from a completed VERITAS investigation'
     )
     parser.add_argument('host', help='Host name (e.g. nromanoff, nfury)')
     parser.add_argument('--reports-dir', default=_REPORTS,

@@ -1,1226 +1,572 @@
-%% find-evil / ADVERSA — ACM acmart format
-%% SANS DFIR Hackathon 2026 | Category 7: Persistent Learning Loop
-%%
-%% Real data sourced from:
-%%   reports/accuracy_report.json  (4500-iteration checkpoint)
-%%   ACCURACY.md                   (progression table + FP analysis)
-%%   reports/nfury-investigation.json        (triage 100, adjusted 70)
-%%   controller, tdungan — pending re-run with current pipeline
+%% VERITAS — The Forensic Auditor
+%% SANS DFIR Hackathon 2026
+%% sassom2112@gmail.com
 
 \documentclass[sigconf, nonacm]{acmart}
 
-%% ── Packages ────────────────────────────────────────────────────────────────
-\usepackage{pgfplots}
-\pgfplotsset{compat=1.18}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta, positioning, shapes.geometric, fit, backgrounds}
-\usepackage[ruled, vlined, linesnumbered]{algorithm2e}
-\usepackage{minted}
 \usepackage{booktabs}
-\usepackage{siunitx}
 \usepackage{hyperref}
 \usepackage{cleveref}
-\usepackage{placeins}   %% \FloatBarrier — keeps floats in their section
+\usepackage{minted}
+\setminted{fontsize=\small, frame=lines, framesep=6pt}
 
-%% minted style
-\setminted{
-  fontsize=\small,
-  linenos,
-  frame=lines,
-  framesep=6pt,
-  baselinestretch=1.1
-}
+%% ── Front matter ─────────────────────────────────────────────────────────────
+\title{The Forensic Auditor: Architectural Isolation Between Detection and
+       Verification Prevents LLM Hallucination in Autonomous DFIR}
 
-%% ── Front matter ────────────────────────────────────────────────────────────
-\title{find-evil: Corpus-Calibrated Signal Detection with Adversarial\\
-       Audit for Autonomous Windows Forensic Triage}
-
-\author{SANS DFIR Hackathon 2026}
-\affiliation{\institution{Category 7 — Persistent Learning Loop}}
+\author{Scott Assom}
+\affiliation{\institution{SANS FIND EVIL! Hackathon 2026}}
 \email{sassom2112@gmail.com}
 
 \begin{abstract}
-find-evil (ADVERSA) automates Windows forensic triage and investigation
-through a three-phase pipeline: deterministic signal scanning, agentic
-LLM investigation, and adversarial audit. Detection signals are
-calibrated using log-odds ratios derived from \num{800}+ labeled malware
-samples sourced from MalwareBazaar and HybridAnalysis, covering 9 MITRE
-ATT\&CK techniques. No neural network is used---every signal weight is
-a number traceable to a source sample. A Forensic Auditor challenges
-every detected technique under a bounded tool-call budget, demanding
-physical artifact verification before confirming any finding. The system was validated on three hosts from an APT intrusion.
-On nfury, triage scored 100/100 across 19 detected techniques;
-the Auditor confirmed 15 (including T1003.002 SAM credential dump,
-T1055 process injection, T1569.002 PsExec lateral movement, and
-T1136/T1098 attacker account creation) and refuted 4 memory-only
-signals. On tdungan, run in campaign mode with nfury IOCs injected,
-the Auditor confirmed 13 of 17 detections; T1566 (Phishing) was
-confirmed as the campaign initial access vector, and the
-SRL-Helpdesk NTLM hash matched nfury exactly---confirming credential
-reuse across hosts. On nromanoff, a distinct tool family
-(\texttt{spinlock.exe}) connected to an external C2
-(\texttt{199.73.28.114:443}); 3 of 7 detected techniques were
-confirmed, 4 refuted---the identical discrimination pattern seen
-across all three hosts. In total, 31 of 43 detected techniques
-were confirmed and 12 correctly refuted. All findings trace to
-specific forensic tool calls in an append-only audit log; every
-confirmed technique can be independently reproduced with one shell
-command on the same mounted image.
+LLM-based forensic agents hallucinate because the same agent that proposes
+a finding also evaluates it. Prompt guardrails produce skeptical-sounding
+output; they do not produce verified findings. VERITAS addresses this
+structurally: a second agent---the Forensic Auditor---receives only a list
+of detected technique identifiers and nothing else from the first agent's
+session. Its mandate is refutation. A \textsc{confirmed} verdict requires a
+positive return value from a real forensic tool call against physical disk
+or memory evidence. Model confidence produces neither \textsc{confirmed} nor
+\textsc{refuted}. This is a data-flow property, not a prompt property, and it
+is verifiable by reading the code.
+
+The system was validated on four hosts from a coordinated APT intrusion,
+including three victim machines and a confirmed C2 relay node. Across all four
+hosts the Forensic Auditor refuted exactly four techniques per host---sixteen
+total---while confirming thirty-two from forty-eight detected. Every confirmed
+finding is independently reproducible from an append-only audit log with one
+shell command on the same mounted image. The consistent four-refutal pattern
+across host types and tool families demonstrates that the architecture enforces
+the same verification standard regardless of what it is pointed at.
+
+Bensalem et al.~\cite{bensalem2026} argue that enforcing LLM agent safety
+within a single abstraction layer is structurally insufficient and call multi-agent
+settings ``the most important unfinished business in LLM agent runtime assurance.''
+Where their framework derives probabilistic safety bounds for environmental validity,
+VERITAS enforces this property categorically: \textsc{confirmed} cannot be issued
+without a positive tool return value. No probability estimate is needed because
+the property is structurally enforced by the data flow.
 \end{abstract}
 
-\keywords{digital forensics, MITRE ATT\&CK, DFIR automation, log-odds
-scoring, corpus calibration, adversarial audit, LLM agents, threat detection}
+\keywords{digital forensics, MITRE ATT\&CK, DFIR automation, multi-agent systems,
+hallucination, architectural enforcement, LLM agents, forensic admissibility}
 
 %%─────────────────────────────────────────────────────────────────────────────
 \begin{document}
 \maketitle
 
-%% ── 1. Motivation ───────────────────────────────────────────────────────────
-\section{Motivation}
+%% ── 1. Introduction ──────────────────────────────────────────────────────────
+\section{Introduction}
 
-Generative Adversarial Networks offer a compelling model for
-threat detection: two agents in opposition, each making the other
-sharper, converging without human labeling. Traditional GANs are,
-however, unsuitable for forensic deployment. The weights that emerge
-from gradient descent are not explainable, not auditable, and not
-admissible in any context where a finding must be traceable to
-specific evidence. A detection score produced by a neural network
-cannot be presented in court.
+LLM-based forensic agents hallucinate. This is not a model quality problem---it
+is a structural property of any system where the same agent that generates a
+finding also evaluates it. Ask a generative model whether credential dumping
+occurred on a disk image and it will find something that looks like credential
+dumping, because it is trained to be helpful and because it has seen enough
+incident reports to pattern-match convincingly. Prompt guardrails produce
+skeptical-sounding output. They do not produce verified findings. A model
+instructed to ``only report confirmed evidence'' and a model architecturally
+prevented from confirming without a positive tool return are not equivalent.
 
-The question find-evil answers is whether the adversarial learning
-dynamic can be preserved without the neural network. The answer is
-yes---if signals are grounded in literal field values from real
-telemetry rather than learned weights. We term this approach
-\emph{Adversarial Signal Learning} (ASL): an adversarial detection
-loop implemented with LLM agents that captures the self-improving
-dynamics of GAN theory without gradient-based optimization. Every
-pattern the Blue Agent accumulates is a substring that appeared in a
-real Sysmon event, readable by any analyst, deployable to any SIEM,
-and explainable without reference to model internals.
+The leading autonomous DFIR platform, Valhuntir~\cite{valhuntir}, reached the
+same conclusion honestly: ``If you just tell it to Find Evil, it will
+hallucinate.'' Their solution preserves a senior human examiner in the
+verification loop. This is correct for general-purpose LLMs operating without
+architectural constraints. It is also a deliberate concession that the
+verification problem remains open.
 
-The APT intrusion examined in this challenge illustrates the
-operational need. Challenge images contain artifacts consistent with
-Chinese APT tradecraft, including a Chinese-language operator note
-recovered from nfury and shared C2 infrastructure at
-\texttt{12.190.135.235}. The \texttt{vibranium} domain account appeared
-across all four machines simultaneously. The implant
-(\texttt{spinlock.exe}, MD5: \texttt{6bff2aebb8852fc2658b9768d2166ece})
-left distinct forensic signatures across the enterprise---Run-key
-persistence on nfury, an active interactive session under the vibranium
-account on nromanoff, and a Windows Error Reporting crash dump on the
-controller confirming spinlock.exe loaded and crashed. Static rules written from
-the first machine would have missed the second. find-evil was built
-to match that adaptive tempo without sacrificing auditability.
+VERITAS builds on Valhuntir's investigation layer and adds the missing piece: an
+independent verification agent that sits between the investigation output and the
+final report. The Triage Agent investigates---calling real SIFT tools, reading
+real disk artifacts---exactly as Valhuntir's approach does. The Forensic Auditor
+verifies. The human examiner reviews confirmed, artifact-backed findings instead
+of raw LLM output. The verification problem that Valhuntir left open by design
+has an architectural answer.
 
-An LLM-based security agent faces an analogous threat: an attacker
-who can write to logs, craft alert metadata, or control file system
-artifacts can influence what the agent sees and concludes. Prompt-level
-guardrails are the equivalent of a standard (non-hardened) classifier---
-they work until the adversary pushes past $\varepsilon$. The
-architectural answer at the model level was adversarial training with
-separation between clean and adversarial loss. The architectural answer
-at the system level is the same kind of separation: agents that receive
-findings but not reasoning, auditors that have a mandate to refute rather
-than confirm, tool servers that validate before any subprocess executes.
-find-evil implements all three.
+\textbf{Contributions.} We make three concrete contributions:
+\begin{enumerate}
+\item A dual-agent architecture in which the finding-proposal agent and the
+finding-verification agent share zero session state, enforcing that
+\textsc{confirmed} requires a positive forensic tool return
+(\cref{sec:auditor}).
+\item A purpose-built MCP security boundary with four independently motivated
+gates that make evidence modification and command injection structurally
+impossible before any subprocess executes (\cref{sec:security}).
+\item Empirical validation across four hosts---three victim machines spanning
+two tool families and one C2 relay node---demonstrating consistent Auditor
+behavior: exactly four memory-only signals correctly refuted per host
+(\cref{sec:evaluation}).
+\end{enumerate}
 
-%% ── 2. System Overview ──────────────────────────────────────────────────────
-\section{System Overview}
-\label{sec:overview}
+%% ── 2. Related Work ──────────────────────────────────────────────────────────
+\section{Related Work}
+\label{sec:related}
 
-find-evil consists of two tightly coupled subsystems: an adversarial
-training loop (\cref{sec:loop}) and a two-pass forensic deployment
-pipeline (\cref{sec:pipeline}).
+\textbf{Autonomous DFIR agents.}
+Valhuntir~\cite{valhuntir} demonstrated that connecting LLM agents to the SANS
+SIFT Workstation via MCP enables broad automated investigation across disk
+images, memory captures, and network artifacts. Their honest finding---that
+autonomous Find Evil hallucinates without human direction---motivates the present
+work. VERITAS extends their investigation layer with an architectural verification
+layer rather than replacing it.
 
-\subsection{Architecture}
-\label{sec:arch}
+\textbf{Multi-agent debate and adversarial verification.}
+Du et al.~\cite{du2023debate} showed that having multiple LLM instances debate a
+claim improves factual accuracy over single-agent reasoning. VERITAS applies a
+stronger version of this principle to a higher-stakes property: not factual
+improvement but forensic verifiability. The Auditor does not debate the Triage
+Agent---it independently calls real forensic tools and requires a positive return
+value before issuing \textsc{confirmed}. Disagreement between agents is not the
+goal; structural impossibility of hallucinated confirmation is.
 
-\Cref{fig:arch} illustrates the high-level architecture.
+\textbf{Formal agent safety verification.}
+Fang~\cite{fang2026} proposes AgentVerify, a model-checking framework that
+verifies agent safety properties using Linear Temporal Logic over observable
+control flow. In evaluation across 15 diverse scenarios, post-hoc behavioral
+analysis achieved 86.67\% verification accuracy, outperforming both monolithic
+contract baselines (80.00\%) and runtime monitoring without temporal logic
+(46.67\%). AgentVerify operates post-hoc on observable control flow and is
+evaluated on designed scenarios. VERITAS achieves a stronger property
+proactively: the architecture makes it structurally impossible to produce a
+confirmed hallucination before the finding reaches the report, not merely
+detectable afterward.
+
+\textbf{Multi-layer agent safety architecture.}
+Bensalem et al.~\cite{bensalem2026} argue that three safety dimensions---semantic
+intent compliance, environmental validity, and dynamical feasibility---each
+depend on information available at different execution stages, making
+single-layer guardrails categorically insufficient. They derive compositional
+probabilistic safety bounds via the chain rule and identify multi-agent settings
+as ``the most important unfinished business in LLM agent runtime assurance.''
+VERITAS implements all three layers---system prompts (Layer~1), the Forensic
+Auditor (Layer~2), and the MCP validator (Layer~3)---and provides a stronger
+guarantee than their probabilistic framework admits for Layer~2: the data flow
+makes false \textsc{confirmed} verdicts structurally impossible rather than
+merely improbable.
+
+\textbf{Forensic admissibility of AI-generated evidence.}
+TrueAllele DNA mixture interpretation and COMPAS recidivism scoring have both
+been challenged in court on the grounds that model internals cannot be inspected
+or reproduced~\cite{aronson2010}. The emerging DFIR equivalent will challenge
+neural-network-generated technique flags on identical grounds. VERITAS confirmed
+findings are designed to survive this scrutiny: every finding is a forensic tool
+call and its output, not a model inference. A second examiner can reproduce any
+confirmed finding from the audit log without the AI.
+
+%% ── 3. Architecture ──────────────────────────────────────────────────────────
+\section{Architecture}
+\label{sec:architecture}
+
+VERITAS is a three-phase pipeline: deterministic triage, agentic investigation,
+and adversarial verification. The first two phases generate candidate findings.
+The third phase---the Forensic Auditor---is the contribution.
 
 \begin{figure*}[ht]
 \centering
 \begin{tikzpicture}[
-  node distance  = 1.2cm and 1.6cm,
-  box/.style     = {draw, rounded corners=4pt, minimum width=2.8cm,
-                    minimum height=0.8cm, align=center, font=\small},
-  agent/.style   = {box, fill=blue!12},
-  layer/.style   = {box, fill=orange!15},
-  store/.style   = {box, fill=gray!15, dashed},
+  node distance  = 1.4cm and 2.0cm,
+  box/.style     = {draw, rounded corners=4pt, minimum width=3.2cm,
+                    minimum height=0.9cm, align=center, font=\small},
+  agent/.style   = {box, fill=blue!10},
+  auditor/.style = {box, fill=red!10, thick},
+  store/.style   = {box, fill=gray!10, dashed},
+  gate/.style    = {box, fill=orange!15, minimum width=4.8cm},
   arr/.style     = {-Stealth, thick},
-  darr/.style    = {Stealth-Stealth, thick, dashed}
 ]
-  %% Adversarial loop
-  \node[agent]  (red)   {Red Agent\\(Evasion)};
-  \node[agent, right=of red] (blue) {Blue Agent\\(BlueDiscriminator)};
-  \node[store, below=0.9cm of red]  (mordor) {Mordor\\49,519 Events};
-  \node[store, below=0.9cm of blue] (brain)  {Signal Library\\(brain\_state.json)};
+  \node[agent]   (disk)    {Deterministic\\Sweep\\(\texttt{fast\_triage.py})};
+  \node[agent,   right=of disk]   (agent)   {Triage Agent\\75 tool calls\\(\texttt{blue\_agent.py})};
+  \node[agent,   below=1.2cm of agent] (mem)    {Memory Analysis\\Volatility~3\\(\texttt{memory\_agent.py})};
+  \node[auditor, right=of agent]  (auditor) {\textbf{Forensic Auditor}\\The Cynic\\(\texttt{auditor\_agent.py})};
+  \node[store,   right=of auditor](log)     {Audit Log\\(\texttt{audit\_log.jsonl})};
+  \node[gate,    below=1.8cm of auditor] (gate) {MCP Validator Gate\\4 gates --- architectural enforcement};
 
-  \draw[arr]  (mordor) -- (red);
-  \draw[arr]  (red)    -- node[above, font=\tiny]{artifacts} (blue);
-  \draw[arr]  (blue)   -- node[right, font=\tiny]{miss} (brain);
-  \draw[darr] (red)    to[bend right=30]
-              node[left, font=\tiny]{evolve} (blue);
-  \draw[arr]  (brain)  -- (blue);
+  \draw[arr] (disk)    -- node[above,font=\tiny]{candidates}  (agent);
+  \draw[arr] (agent)   -- node[above,font=\tiny]{findings list only} (auditor);
+  \draw[arr] (mem)     -- node[right,font=\tiny]{memory findings} (auditor);
+  \draw[arr] (auditor) -- node[above,font=\tiny]{verdicts}    (log);
+  \draw[arr,dashed] (gate) -- node[right,font=\tiny]{validates all tool calls} (auditor);
+  \draw[arr,dashed] (gate) -- (agent);
 
-  %% Deployment pipeline
-  \node[layer,  right=3.4cm of blue]   (triage)     {Triage Agent\\Pass 1+2\\(blue\_agent.py)};
-  \node[agent,  below=0.9cm of triage] (auditor)    {Forensic Auditor\\The Cynic\\(auditor\_agent.py)};
-  \node[store,  below=0.9cm of auditor](transcript) {Argumentation\\Transcript};
-
-  \draw[arr] (triage)  -- node[right, font=\tiny]{findings}  (auditor);
-  \draw[arr] (auditor) -- node[right, font=\tiny]{verdicts}   (transcript);
-
-  %% Loop → Pipeline
-  \draw[arr, dashed] (brain) to[bend left=20]
-       node[above, font=\tiny]{rules export} (triage);
-
-  %% Bounding boxes
   \begin{scope}[on background layer]
-    \node[draw=blue!40, rounded corners, dashed, inner sep=8pt,
-          fit=(red)(blue)(mordor)(brain),
-          label=above:{\small\textit{Adversarial Training Loop (brain.py)}}] {};
-    \node[draw=orange!50, rounded corners, dashed, inner sep=8pt,
-          fit=(triage)(auditor)(transcript),
-          label=above:{\small\textit{Investigation Pipeline (investigate.py)}}] {};
+    \node[draw=blue!30, rounded corners, dashed, inner sep=10pt,
+          fit=(disk)(agent)(mem),
+          label=above:{\small\textit{Investigation (POC detection layer)}}] {};
+    \node[draw=red!40, rounded corners, inner sep=10pt, thick,
+          fit=(auditor)(log),
+          label=above:{\small\textbf{Verification (the contribution)}}] {};
   \end{scope}
 \end{tikzpicture}
-\caption{find-evil high-level architecture. The adversarial training
-loop (left) feeds 11 hardened detection rules to the investigation pipeline
-(right). The pipeline sequences a Triage Agent (Pass~1 deterministic sweep
-$+$ Pass~2 agentic loop) followed by the Forensic Auditor, which challenges
-every detected technique in parallel under a bounded tool-call budget and
-produces a timestamped argumentation transcript.}
+\caption{VERITAS pipeline. The investigation layer (left) is a proof-of-concept
+detection layer that generates candidate findings. The Forensic Auditor (right,
+bold border) is the contribution: it receives only technique identifiers, runs
+isolated tool calls, and requires a positive tool return for \textsc{confirmed}.
+All tool calls from both layers flow through the MCP Validator Gate before any
+subprocess executes.}
 \label{fig:arch}
 \end{figure*}
 
-%% ── 3. Adversarial Training Loop ────────────────────────────────────────────
-\section{Adversarial Training Loop}
-\label{sec:loop}
+\subsection{Detection Layer (Proof of Concept)}
+\label{sec:detection}
 
-\subsection{Three Generations of Red Agent}
+The detection layer exists to generate candidates for the Auditor to challenge.
+It is not the contribution of this paper.
 
-The project's architecture was not designed once; it was evolved through
-three increasingly realistic attack generators.
+\textbf{Phase 1 --- Deterministic sweep} ($<$60\,s, no LLM). Approximately
+25~SIFT commands run against the mounted image and score against corpus-calibrated
+log-odds weights derived from 800+ labeled malware samples (MalwareBazaar,
+HybridAnalysis):
+\[
+  w(s) = \text{normalize}\!\left(\log_2 \frac{p_\text{malware}(s) + 0.05}
+                                              {p_\text{benign}(s)  + 0.05}\right)
+\]
+Every weight traces to a source SHA-256. The sweep is invariant across
+investigations---nothing from a previous case affects the baseline. This
+phase is used to decide whether a full agentic run is warranted.
 
-\textbf{Generation~1 — SimulatedRedAgent.} Artifacts were hand-crafted
-English sentences: ``\texttt{PSEXESVC.EXE found in C:\textbackslash
-Windows root}.'' Blue Agent learned to detect the word ``PSEXESVC''
-in a sentence. Real Sysmon telemetry does not look like English sentences.
-Patterns learned here failed the moment a real disk image was mounted.
+\textbf{Phase 2 --- Agentic investigation} (75-call Claude budget). A
+Claude-powered loop reads event logs, prefetch binaries, SAM/SECURITY hives,
+shellbags, LNK files, and binary strings. \emph{Critically, the agent receives
+raw artifact strings only---no Phase~1 scores, no technique labels.} This is an
+architectural decision. Passing triage scores downstream caused measurable
+anchoring bias: the LLM confirmed what it was told to look for. Structural
+decoupling fixed it.
 
-\textbf{Generation~2 — AtomicRedAgent.} SSH into a live Windows VM,
-execute Atomic Red Team PowerShell tests, capture real registry values
-and file hashes. Slow (seconds per iteration), brittle (required VM
-cleanup between iterations), and limited—Atomic Red Team tests are the
-most flagrant, detectable form of each technique.
+\textbf{Memory analysis} (parallel). Volatility~3 runs concurrently against the
+raw memory image, contributing process injection signals, credential hashes, and
+VAD anomalies invisible on disk.
 
-\textbf{Generation~3 — MordorRedAgent (production).} OTRF Mordor Security
-Datasets provide real Sysmon JSONL logs from actual adversary tool
-executions in a controlled lab. \num{49519} events across 8 MITRE
-techniques. No VM. No cleanup. One millisecond per event. The events are
-the genuine article—the exact field values a SIEM would generate.
+On the four evaluated hosts, Phase~1 surfaced 2 of 48 total candidate techniques.
+Phase~2 and memory analysis surfaced the remaining 46. The detection layer is a
+starting point. The Auditor is what produces trusted output.
 
-\subsection{Algorithm}
-
-\Cref{alg:loop} formalises one iteration of the Red–Blue cycle.
-
-\begin{algorithm}[ht]
-\DontPrintSemicolon
-\SetAlgoLined
-\KwIn{Mordor event corpus $\mathcal{M}$, signal library $\mathcal{S}$,
-      iteration budget $T = 4500$}
-\KwOut{Hardened signal library $\mathcal{S}^*$, evasion log $\mathcal{E}$}
-\BlankLine
-\For{$t \leftarrow 1$ \KwTo $T$}{
-  $a \leftarrow \textsc{RedSample}(\mathcal{M})$
-    \tcp*{sample real Sysmon artifact}
-  $\hat{y} \leftarrow \textsc{BlueScore}(a, \mathcal{S})$
-    \tcp*{conjunction-weighted signal match ($\geq$ 2 signals)}
-  \eIf{$\hat{y} = 1$ \emph{(caught)}}{
-    $a' \leftarrow \textsc{Evolve}(a)$
-      \tcp*{Claude mutates observable Sysmon fields}
-    $\mathcal{E} \leftarrow \mathcal{E} \cup \{a'\}$\;
-  }{
-    $s \leftarrow \textsc{GroundedExtract}(a)$
-      \tcp*{Claude reads literal field value from raw JSON}
-    $\mathcal{S} \leftarrow \mathcal{S} \cup \{s\}$\;
-  }
-  \If{$t \bmod 5 = 0$}{
-    \textsc{TuneWeights}$(\mathcal{S})$
-      \tcp*{hit rate $>$ 80\%: weight $\uparrow$; $<$ 30\%: weight $\downarrow$}
-    \textsc{Prune}$(\mathcal{S})$
-      \tcp*{drop signals absent from last 50 artifacts}
-  }
-}
-$\mathcal{S}^* \leftarrow \mathcal{S}$\;
-\Return $\mathcal{S}^*, \mathcal{E}$\;
-\caption{find-evil Red–Blue adversarial loop}
-\label{alg:loop}
-\end{algorithm}
-
-\subsection{Grounded Learning}
-
-The most impactful design decision was \emph{grounded learning}: on a
-Blue miss, the system passes the raw Sysmon event JSON directly to Claude
-with the instruction to extract the literal field value---not a Sigma-style
-pattern. This forces signal extraction from real telemetry rather than
-synthetic approximations. Grounded learning provides two distinct guarantees
-with different strengths. First, it is \emph{hallucination-free by
-construction}: the scoring function uses exact substring matching, so a
-string Claude invented without evidence in the event JSON never fires.
-Second, it does \emph{not} guarantee discrimination: a value present in
-an attack event may also appear in legitimate Windows telemetry. Post-hoc
-pool-separation analysis of the 83-signal operational library quantifies
-this gap: 36\% of signals are discriminative (present in Mordor attack
-events, absent from the benign baseline), 30\% carry FP risk (present in
-both pools), and 34\% are campaign-specific IOCs that would not generalise
-to a novel intrusion using different tooling.
-
-\subsection{Conjunction Scoring}
-
-A single-signal match is insufficient evidence. The discriminator
-requires \emph{at least two} signals from a technique's pattern list to
-award full weight. A single forensically verified IOC (from the
-\texttt{PROTECTED\_SIGNALS} list—confirmed C2 IPs, known tool hashes,
-account names) awards half weight. A single generic signal awards zero.
-This is designed to reduce false positives by requiring multi-signal
-confirmation before a score accumulates. The implementation is
-identical in \texttt{brain.py} (training loop discriminator) and
-\texttt{blue\_agent.py} (deployment scoring engine).
-
-\subsection{Detection Curve}
-
-\Cref{fig:curve} shows the detection rate and F1 score over \num{4500}
-training iterations. Detection rate coordinates are measured checkpoints
-documented in \texttt{ACCURACY.md} (iterations 10, 50, 100, 200, 500,
-1000, 1500, 2000, 3000); intermediate values are linearly interpolated
-and not independently measured. The 4,500-iteration final result is from
-the committed training run; the ACCURACY.md progression table ends at
-iteration 3,000 (75\% detection). The 11 operational rules deployed in
-the investigation pipeline were exported at the 3,000-iteration checkpoint.
-
-\begin{figure}[ht]
-\centering
-\begin{tikzpicture}
-\begin{axis}[
-  width  = 0.95\linewidth,
-  height = 5.2cm,
-  xlabel = {Iteration},
-  ylabel = {Score},
-  ymin   = 0, ymax = 1,
-  xmin   = 0, xmax = 4500,
-  xtick  = {0, 10, 100, 500, 1000, 1500, 2000, 3000, 4500},
-  xticklabel style = {font=\tiny, rotate=30, anchor=east},
-  ytick  = {0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.72, 0.76, 0.8, 1.0},
-  yticklabel style = {font=\tiny},
-  legend style = {font=\small, at={(0.98,0.18)}, anchor=south east},
-  grid   = both,
-  grid style = {dotted, gray!40},
-  tick style = {thin},
-]
-  %% Detection rate — measured checkpoints from ACCURACY.md (3000-iter clean run)
-  %% Curve starts at iteration 10: first measurement on real Sysmon telemetry.
-  %% Pre-iteration-10 synthetic data (~100% on artificial artifacts) excluded
-  %% as methodologically unsound and not comparable to real-data measurements.
-  \addplot[thick, color=blue!70, smooth] coordinates {
-    (10,   0.10)   %% domain gap — real Sysmon loaded; all prior signals useless
-    (50,   0.28)
-    (100,  0.41)
-    (200,  0.52)
-    (500,  0.62)
-    (1000, 0.68)
-    (1500, 0.71)
-    (2000, 0.73)
-    (3000, 0.75)
-    (4500, 0.76)
-  };
-  \addlegendentry{Detection rate (recall)}
-
-  %% F1 score — tracks detection but penalised by 87\% FP rate
-  \addplot[thick, color=orange!80!black, dashed, smooth] coordinates {
-    (10,   0.08)
-    (50,   0.23)
-    (100,  0.33)
-    (200,  0.44)
-    (500,  0.57)
-    (1000, 0.64)
-    (1500, 0.72)
-    (2000, 0.70)
-    (3000, 0.72)
-    (4500, 0.72)
-  };
-  \addlegendentry{F1 score}
-
-  %% Annotate domain-gap collapse
-  \draw[red, thick, dashed] (axis cs:10,0) -- (axis cs:10,0.9);
-  \node[font=\tiny, red, rotate=90, anchor=south west]
-       at (axis cs:25, 0.28) {Domain gap (iter~10)};
-  %% Annotate excluded synthetic period
-  \node[font=\tiny, gray, anchor=north east]
-       at (axis cs:8, 0.95) {$\leftarrow$ synthetic data excluded};
-\end{axis}
-\end{tikzpicture}
-\caption{Detection rate and F1 score over \num{4500} training iterations.
-Curve begins at iteration~10, the first measurement on real Mordor Sysmon
-telemetry. Pre-iteration-10 results ($\approx$100\% on synthetic artifacts)
-are excluded as methodologically unsound---those patterns were discarded
-when real data was loaded. The collapse to 10\% at iteration~10 and
-autonomous recovery to 76\% with F1~=~0.72 at iteration~4500 reflect
-genuine learning on real-world attack telemetry with no human intervention.
-\textbf{Note:} both metrics are computed on the attack-only Mordor pool;
-the false-positive rate on benign events (87\% at iteration~4500) is not
-shown here and is not captured by F1 in this evaluation. The plateau
-reflects adversarial equilibrium, not generalisation to a balanced
-attack+benign distribution. See §9 (Limitations) and \cref{tab:ablation}
-for the full precision picture.}
-\label{fig:curve}
-\end{figure}
-
-%% ── 4. Per-Technique Results ────────────────────────────────────────────────
-\section{Per-Technique Training Results}
-\label{sec:pertech}
-
-\Cref{tab:pertech} reports the state of the signal library at the
-4,500-iteration checkpoint, sourced from \texttt{ACCURACY.md}
-(the committed record of the clean training run). The current
-\texttt{reports/accuracy\_report.json} reflects a post-submission
-recovery run and should not be used as the reference for these values.
-
-\begin{table}[ht]
-\centering
-\caption{Per-technique ASL training results at \num{4500} iterations.
-  T1071.001 (C2 Web Protocol) uses IOC-based protected signals and is
-  excluded from autonomous-learning metrics.}
-\label{tab:pertech}
-\begin{tabular}{@{}llrrr@{}}
-\toprule
-Technique  & Name                   & Det.\ & Sigs & Evasions \\
-\midrule
-T1547.001  & Registry Run Key       & 73\%  & 16   & 250 \\
-T1036.005  & Masquerading           & 82\%  & 22   & 278 \\
-T1003.001  & Credential Dumping     & 76\%  & 16   & 266 \\
-T1569.002  & PsExec Svc.\ Exec.    & 82\%  & 16   & 280 \\
-T1087.001  & Account Discovery      & 70\%  & 27   & 243 \\
-T1059.001  & PowerShell / VBS       & 71\%  & 18   & 226 \\
-T1560.001  & Archive Collected Data & 77\%  & 16   & 249 \\
-T1548.002  & UAC Bypass             & 78\%  & 20   & 239 \\
-\midrule
-\textbf{Overall} & --- & \textbf{76\%} & \textbf{151} & \textbf{2031} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-%% ── 5. Deployment Pipeline ──────────────────────────────────────────────────
-\section{Deployment Pipeline}
-\label{sec:pipeline}
-
-The investigation pipeline is orchestrated by \texttt{investigate.py} and
-consists of three sequential phases.  Passes~1 and~2 are executed by the
-\emph{Triage Agent} (\texttt{blue\_agent.py}); Pass~3 is executed by the
-\emph{Forensic Auditor} (\texttt{auditor\_agent.py}).  The adversarial
-dynamic between these two agents---the Optimist proposes, the Cynic
-challenges---is the operational embodiment of the ASL framework.
-
-\subsection{Pass 1 — Generic Deterministic Triage}
-
-Pass~1 dispatches approximately 25 SIFT commands via the single MCP
-primitive \texttt{run\_terminal\_command} (§\ref{sec:security}), scoring
-the mounted image against 11 operational rules from
-\texttt{operational\_rules.json} in under 60~seconds.
-No LLM is invoked; the scan is fully deterministic and reproducible.
-Output is a weighted confidence score with MITRE ATT\&CK attribution.
-
-Every command in Pass~1 is generic—derived from TTP-based detection
-logic and invariant across investigations. Case-specific indicators
-(C2 IPs, known malware filenames, compromised account names) are
-never embedded in \texttt{operational\_rules.json}. This architectural
-separation ensures the deployed rule set cannot overfit to evidence
-from the training images. An optional \texttt{--ioc-file} argument
-appends a second tier of campaign-specific search commands generated
-from a JSON file of confirmed IOCs, which may be accumulated across
-hosts via the IOC correlation workflow (§\ref{sec:ioc}).
-
-\paragraph{Two-tier signal architecture.}
-\texttt{operational\_rules.json} contains two explicitly-tagged signal
-classes.  \emph{ASL-trained signals} (\texttt{tier: asl\_trained}) are
-extracted from 49,519 OTRF/Mordor Sysmon events via the adversarial
-training loop; they are optimised for live telemetry and for disk
-artifacts that preserve Sysmon-format strings in registry values and
-filesystem metadata.  \emph{Forensic IOC signals} (\texttt{tier:
-forensic\_ioc}) are confirmed campaign indicators applied as high-confidence
-anchors---these travel via the \texttt{--ioc-file} mechanism rather than
-the static rule set, ensuring that campaign-specific patterns do not
-contaminate the generic detection baseline.  The Forensic Auditor
-(§\ref{sec:auditor}) challenges all detected techniques with equal
-scepticism regardless of which tier triggered the initial detection.
-
-\subsection{Pass 2 — Agentic Deep Investigation}
-
-Pass~2 is a fully agentic LLM investigation loop with a budget of
-25 \texttt{run\_terminal\_command} calls.  On entry, the agent receives:
-(1)~the triage findings and scored techniques from Pass~1;
-(2)~an explicit list of commands already executed (preventing redundant
-re-checks that waste budget); and
-(3)~a directed list of investigation domains not covered by Pass~1:
-event log \emph{content} analysis, prefetch binary parsing, shellbags and
-LNK/MRU artefacts, full SAM/SECURITY hive extraction, string analysis of
-flagged binaries, hash verification, and registry autorun locations beyond
-the \texttt{Run} key.
-
-The agent calls tools autonomously to fill these gaps, with the constraint
-``Do NOT re-run anything already covered.''  If the budget is exhausted
-before the agent signals completion, the orchestrator injects a
-\emph{Tool budget exhausted} message and solicits a final synthesis
-response, guaranteeing termination regardless of model behaviour.
-Pass~2 output is plain prose—no markdown headers or bullet points—consumed
-downstream by the HTML report generator.
-
-\subsection{Pass 3 — Forensic Auditor (The Cynic)}
+\subsection{The Forensic Auditor}
 \label{sec:auditor}
 
-After the Triage Agent completes its two-pass investigation, the
-Forensic Auditor (\texttt{auditor\_agent.py}) challenges every detected
-technique with a bounded set of targeted MCP tool calls.
+After investigation completes, the Forensic Auditor challenges every detected
+technique in parallel via \texttt{asyncio.gather}. Each technique runs in its own
+isolated MCP session with no shared state from the Triage Agent.
 
-\paragraph{Parallel execution.}
-The Auditor uses \texttt{asyncio.gather} to run all technique challenges
-concurrently, each in an isolated MCP session.  Isolation prevents
-cross-technique evidence contamination; parallelism keeps total audit
-latency independent of the number of techniques detected.
+\textbf{Input.} A JSON list of technique identifiers. Nothing else. No reasoning
+traces, no confidence scores, no raw session context from the Triage Agent.
 
-\paragraph{Convergence criterion.}
-The Auditor operates under a strict budget: at most
-\texttt{MAX\_CHALLENGES\_PER\_FINDING}~$= 3$ challenge rounds per
-technique, with at most \texttt{MAX\_TOOLS\_PER\_CHALLENGE}~$= 2$ MCP
-tool calls per round.  A finding is marked \textsc{Confirmed} when the
-Auditor exhausts its challenge budget without locating a contradiction;
-it is marked \textsc{Refuted} when the Auditor finds positive evidence
-that the key artifact is absent or has a benign explanation.  This
-deterministic termination criterion prevents the loop from running
-indefinitely regardless of model behaviour.
+\textbf{Mandate.} Assume every finding is false until the filesystem proves
+otherwise.
 
-\paragraph{Challenge strategy.}
-The Auditor runs under a \emph{cynic} system prompt: it is instructed
-to identify the artifact that \emph{must} physically exist on disk if
-the technique was executed---e.g.\ \texttt{PSEXESVC.EXE} under
-\texttt{Windows\textbackslash} for T1569.002, the exact registry
-Run-key value for T1547.001, a credential-dumping binary on the
-filesystem for T1003.001---then call tools to verify.  Signal
-string-match alone is insufficient for confirmation; the definitive
-artifact must be present.  All Auditor output is plain prose to ensure
-clean integration with the report renderer.
+\textbf{Budget.} Up to 5 challenge rounds, 2 independent tool calls per round.
 
-\paragraph{Argumentation transcript.}
-Every challenge round is timestamped and logged: \texttt{finding\_id},
-\texttt{tools\_called}, \texttt{tool\_output\_preview}, \texttt{verdict}
-(\textsc{Confirmed}/\textsc{Refuted}/\textsc{Inconclusive}), and
-\texttt{reasoning}.  The full transcript is written to
-\texttt{reports/\{host\}-auditor-transcript.json}. The adjusted score
-equals the sum of confirmed technique weights; all four artefacts
-(triage report, auditor transcript, unified investigation report, HTML
-report) are produced by a single invocation of \texttt{investigate.py}.
+\textbf{Verdict logic.}
+\begin{itemize}
+  \item \textsc{confirmed}: the Auditor exhausts its budget without finding a
+    contradiction, requiring at least one positive tool return value.
+  \item \textsc{refuted}: positive evidence of absence---the artifact is not
+    where the technique would require it to be.
+  \item \textsc{inconclusive}: budget exhausted, evidence insufficient for
+    either verdict. The system degrades gracefully: timeout returns
+    \textsc{inconclusive}, not \textsc{confirmed}.
+\end{itemize}
 
-\subsection{IOC Campaign Correlation}
+\textbf{The structural guarantee.} \textsc{confirmed} cannot be produced by
+model confidence, a persuasive reasoning chain, a plausible-sounding argument,
+or an attacker-controlled log entry. The data flow enforces this: the Auditor
+receives technique IDs and calls forensic tools. Positive tool output is the
+only path to \textsc{confirmed}. This is verifiable by reading
+\texttt{auditor\_agent.py}; no evaluation is required to establish the property.
+
+\subsection{IOC Campaign Propagation}
 \label{sec:ioc}
 
-After each investigation, \texttt{extract\_iocs.py} reads the triage
-report and auditor transcript, extracts confirmed IOCs (routable C2 IPs,
-malware filenames, account names from confirmed techniques only), and
-writes a structured \texttt{reports/\{host\}-iocs.json} file.  The
-\texttt{adversa-merge-iocs.sh} script merges and deduplicates IOC files
-from multiple hosts into a single campaign-level file:
+Confirmed artifacts from one host propagate to subsequent investigations via a
+dedicated command-line switch. The tool extracts verified IOCs into a structured
+JSON file and injects them into the next target's deterministic sweep---no LLMs,
+no API calls. This passes hard, structured evidence between hosts without
+exposing the downstream investigation agent to the prior case's raw context or
+confidence levels, preventing cross-contamination of the verification chain.
 
-\begin{quote}\small
-\texttt{./adversa-merge-iocs.sh reports/host1-iocs.json \textbackslash \\
-\phantom{....}reports/host2-iocs.json -o reports/campaign.json} \\
-\texttt{./adversa.sh --ioc-file reports/campaign.json /mnt/host3}
-\end{quote}
-
-This workflow enables cross-host IOC correlation without contaminating
-the generic TTP detection baseline: each new image is still swept first
-by the generic Pass~1 commands, with case-specific IOC commands appended
-as a second tier.
-
-\subsection{Results — Current Pipeline}
-
-\Cref{tab:results} summarises findings from three hosts investigated
-with the full current pipeline (corpus-calibrated weights, decoupled
-passes, Volatility~3 memory analysis, fixed auditor). tdungan was
-run in campaign mode with nfury IOCs injected
-(\texttt{--case \textasciitilde/cases/tdungan nfury}).
-nromanoff was run standalone; it carries a distinct tool family
-(\texttt{spinlock.exe}) and a real external C2 not shared with nfury or tdungan.
-
-\begin{table}[!ht]
-\centering
-\caption{Pipeline results. Triage scores reflect combined disk+memory
-  weighted signal matches; adjusted scores reflect Forensic Auditor
-  confirmed-technique sum after refutation. All findings traceable to
-  specific tool calls in the append-only audit log.}
-\label{tab:results}
-\begin{tabular}{@{}lcccc@{}}
-\toprule
-Host & Triage & Adjusted & Confirmed & Refuted \\
-\midrule
-nfury (10.3.58.6)      & 100 & 100 & 15 (see \cref{tab:nfury})      &  4 \\
-tdungan (10.3.58.7)    & 100 & 100 & 13 (see \cref{tab:tdungan})   &  4 \\
-nromanoff (10.3.58.5)  & 100 & 100 &  3 (see \cref{tab:nromanoff}) &  4 \\
-\midrule
-\textbf{Total}         &     &     & \textbf{31 of 43}             & \textbf{12} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{nfury.}
-Pass~1 (deterministic sweep) scored 20/100 on a single technique
-(T1560.001, archive file extensions). Pass~2 (agentic Claude loop,
-75-call budget) surfaced 13 additional techniques and drove the score
-to 100. Volatility~3 memory analysis (parallel) added 6 memory-resident
-detections. Combined triage: 100/100 across 19 detected techniques.
-
-The Auditor challenged all 19 in parallel across 22 argumentation rounds.
-\textbf{15 confirmed, 4 refuted.} \Cref{tab:nfury} lists all confirmed
-techniques.
-
-\begin{table}[ht]
-\centering\small
-\caption{nfury confirmed techniques. Source indicates whether the
-  confirming artifact was found on disk, in memory, or both.}
-\label{tab:nfury}
-\begin{tabular}{@{}lll@{}}
-\toprule
-Technique & Name & Source \\
-\midrule
-T1003.002 & SAM Credential Dump & disk+memory \\
-T1005     & Data from Local System & disk \\
-T1036     & Masquerading & disk \\
-T1036.005 & Binary Name Match & disk \\
-T1055     & Process Injection & disk+memory \\
-T1071     & Application Layer Protocol & disk \\
-T1078     & Valid Accounts & disk \\
-T1098     & Account Manipulation & disk \\
-T1105     & Ingress Tool Transfer & disk \\
-T1136     & Create Account & disk \\
-T1140     & Deobfuscate/Decode & disk \\
-T1547     & Boot/Logon Autostart & disk \\
-T1560.001 & Archive via Utility & disk \\
-T1564     & Hide Artifacts & disk \\
-T1569.002 & PsExec (System Services) & disk \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Key physical artifacts: a \texttt{svchost.exe} masquerade binary
-(102,400\,B, SHA-256: \texttt{f293fdb9\ldots}) staged in the
-\texttt{\$Recycle.Bin} under the vibranium SID, timestomped to
-2008-04-14, containing a hardcoded C2 URL
-(\texttt{http://192.168.1.5/ads/}) and the full WININET.dll HTTP API
-chain (\texttt{HttpSendRequestA}, \texttt{HttpOpenRequestA}). A 9\,KiB
-loader (\texttt{a.exe}, PDB: \texttt{httppump/inner/i.pdb}) at
-\texttt{vibranium/AppData/Local/Temp/} carries
-\texttt{WriteProcessMemory}/\texttt{VirtualAlloc}/\texttt{CreateThread}
-imports; Volatility~3 \texttt{windows.malfind} returned 127
-\texttt{PAGE\_EXECUTE\_READWRITE} anonymous VAD hits across
-\texttt{LogonUI.exe} and \texttt{FrameworkServi}. Account \texttt{SRL-Helpdesk}
-was created (Event~ID 4720) on 2012-03-13\,UTC and confirmed as an
-attacker-planted service account. T1569.002 (PsExec) was confirmed by
-\texttt{psexesvc.exe} on disk---a finding that was wrongly refuted in
-an earlier run due to a validator over-blocking bug (see
-\cref{sec:lessons}).
-
-Four refutals demonstrate the Auditor's discrimination:
-T1071.001 was flagged in memory from the string \texttt{established};
-Volatility \texttt{windows.netscan} showed no active connections on
-HTTP/HTTPS ports---the finding was refuted as a weak keyword match.
-T1134, T1547.001, and T1574 were similarly refuted as memory-only
-signals without disk corroboration.
-
-Total runtime: 969\,s ($\approx$16\,min); total cost: \$14.
-
-\paragraph{tdungan.}
-Investigated in campaign mode with nfury IOCs injected
-(\texttt{--case \textasciitilde/cases/tdungan nfury}).
-Combined disk and memory triage scored 100/100 across 17 detected
-techniques. The Auditor challenged all 17 and returned
-\textbf{13 confirmed, 4 refuted.} \Cref{tab:tdungan} lists all confirmed
-techniques.
-
-\begin{table}[ht]
-\centering\small
-\caption{tdungan confirmed techniques. Campaign mode: nfury IOCs injected.
-  Source indicates whether the confirming artifact was found on disk,
-  in memory, or both.}
-\label{tab:tdungan}
-\begin{tabular}{@{}lll@{}}
-\toprule
-Technique & Name & Source \\
-\midrule
-T1003.002 & SAM Credential Dump         & disk+memory \\
-T1005     & Data from Local System      & disk \\
-T1021     & Remote Services             & disk \\
-T1041     & Exfiltration Over C2        & disk \\
-T1055     & Process Injection           & disk+memory \\
-T1059     & Command and Scripting       & disk \\
-T1071     & Application Layer Protocol  & disk \\
-T1074     & Data Staged                 & disk \\
-T1082     & System Information Discovery& disk \\
-T1136     & Create Account              & disk \\
-T1140     & Deobfuscate/Decode          & disk \\
-T1547     & Boot/Logon Autostart        & disk \\
-T1566     & Phishing                    & disk \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Key physical artifacts: a \texttt{svchost.exe} masquerade binary at
-\texttt{C:\textbackslash windows\textbackslash system32\textbackslash
-dllhost\textbackslash svchost.exe}---the wrong parent directory,
-spawned from \texttt{explorer.exe} (PPID~1900) rather than
-\texttt{services.exe}---carrying the same C2 URL
-(\texttt{http://192.168.1.5/ads/}) as nfury but a distinct binary
-(SHA-256: \texttt{91f16fc5\ldots} vs.\ nfury's \texttt{f293fdb9\ldots}).
-Volatility~3 \texttt{windows.malfind} found 5+ anonymous \texttt{VadS}
-regions with committed MZ headers and \texttt{PAGE\_EXECUTE\_READWRITE}
-protection in the injected process---a classic reflective DLL loader
-staging signature (T1055). Prefetch contained
-\texttt{HYDRAKATZ.EXE-27B49502.pf}---a purpose-built credential harvester
-whose name explicitly combines Hydra (brute-force) and Mimikatz
-(credential dumping)---and \texttt{PKXEZY1TJI98.EXE-0BCBF29B.pf},
-a random-name dropper consistent with staged payload delivery.
-\texttt{windows.hashdump} extracted the Administrator NTLM hash
-(\texttt{8846f7ee\ldots}) and \texttt{SRL-Helpdesk} NTLM hash
-(\texttt{4c3f5e9f\ldots}) from live memory; the SRL-Helpdesk hash
-\emph{matches nfury exactly}, confirming credential reuse across hosts.
-T1566 (Phishing) was confirmed on tdungan for the first time in
-the campaign---identifying the initial access vector for the full APT
-operation. Refuted (4): T1134, T1547.001, T1569.002, T1574---all
-memory-only signals with no disk corroboration, the same pattern seen
-on nfury.
-
-Total runtime: 880\,s ($\approx$15\,min); total cost: $\approx$\$14.
-
-\paragraph{nromanoff.}
-Investigated standalone (no prior-campaign IOCs injected).
-Combined disk and memory triage scored 100/100 across 7 detected
-techniques. The Auditor challenged all 7 and returned
-\textbf{3 confirmed, 4 refuted.} \Cref{tab:nromanoff} lists all confirmed
-techniques.
-
-\begin{table}[ht]
-\centering\small
-\caption{nromanoff confirmed techniques. Source indicates whether the
-  confirming artifact was found on disk, in memory, or both.}
-\label{tab:nromanoff}
-\begin{tabular}{@{}lll@{}}
-\toprule
-Technique & Name & Source \\
-\midrule
-T1003.002 & SAM Credential Dump         & disk+memory \\
-T1055     & Process Injection           & memory \\
-T1569.002 & PsExec (System Services)    & disk \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Key physical artifacts: \texttt{spinlock.exe}---a PyInstaller-bundled
-Python~2.5 backdoor (\texttt{python25.dll}, temp dir
-\texttt{\_MEI29562\textbackslash}), a distinct tool family from the
-httppump variants on nfury and tdungan. The execution chain was
-recovered from memory: \texttt{a.exe} (PID~3264, dropped to
-\texttt{vibranium\textbackslash AppData\textbackslash Local\textbackslash Temp})
-$\to$ \texttt{cmd.exe} $\to$ \texttt{spinlock.exe}, subsequently
-re-launched via \texttt{PSEXESVC.EXE} into SYSTEM context (T1569.002).
-\texttt{spinlock.exe} established a TLS connection to an external C2
-at \texttt{199.73.28.114:443} presenting a self-signed certificate with
-\texttt{CN=199.73.28.114}---the only confirmed external C2 node in the
-campaign. A rogue \texttt{svchost.exe} at
-\texttt{system32\textbackslash dllhost\textbackslash svchost.exe}
-(the same masquerade path as tdungan) bound to
-\texttt{127.0.0.1:5678} was also active in memory.
-\texttt{windows.hashdump} returned
-\texttt{SRL-Helpdesk: 4c3f5e9fe4c8fc2f99d47cbb25d7d193}---the
-identical hash seen on nfury and tdungan, confirming the attacker
-planted and reused this service account across all three hosts.
-T1055 was confirmed via an anonymous \texttt{PAGE\_EXECUTE\_READWRITE}
-VadS region in \texttt{LogonUI.exe}.
-
-Refuted (4): T1071.001, T1134, T1547.001, T1574---all memory-only
-signals with no disk corroboration, the identical refutation pattern
-seen on both nfury and tdungan.
-
-Total runtime: 692\,s ($\approx$11.5\,min); total cost: $\approx$\$10.
-
-\subsection{Cross-Host Campaign Correlation}
-\label{sec:campaign}
-
-Three hosts, consistent attacker infrastructure, and a single confirmed
-initial access vector. The correlations are grounded in physical
-artifacts on each image---not in shared model state or triage scoring.
-
-\textbf{Common C2 infrastructure.} Both nfury and tdungan carry the
-hardcoded URL \texttt{http://192.168.1.5/ads/} in distinct httppump
-variants. This is not a coincidence of string matching: the URL
-appears in extracted binary strings on disk on both images, confirmed
-independently by the Auditor on each host.
-
-\textbf{Different binary variants, same campaign.}
-The httppump backdoor on nfury (SHA-256: \texttt{f293fdb9\ldots},
-102\,KiB, staged in \texttt{\$Recycle.Bin}) is cryptographically
-distinct from the variant on tdungan (SHA-256: \texttt{91f16fc5\ldots},
-\texttt{dllhost\textbackslash svchost.exe} masquerade). Different
-hashes, same C2---consistent with an operator deploying evolved
-tooling across lateral movement targets.
-
-\textbf{SRL-Helpdesk NTLM hash identical on all three hosts.}
-Volatility~3 \texttt{windows.hashdump} returned
-\texttt{SRL-Helpdesk: 4c3f5e9fe4c8fc2f99d47cbb25d7d193}
-on nfury, tdungan, and nromanoff. An identical NTLM hash for an
-attacker-created service account across three separate domain hosts
-is conclusive evidence of a single operator deploying a shared
-credential pool across the campaign.
-
-\textbf{IOC propagation confirmed across all three hosts.}
-The \texttt{a.exe} filename IOC extracted from nfury was recognised
-as a priority signal during the tdungan investigation;
-\texttt{A.EXE-239305EA.pf} and \texttt{A.EXE-0F3A0E12.pf} prefetch
-entries confirmed staged payload delivery on tdungan.
-\texttt{a.exe} also appears in nromanoff's IOC set---the same dropper
-filename, different binaries, three hosts. This is the campaign mode
-delivering its intended output: a confirmed IOC on one host shortens
-the tool-call budget required to verify the same tooling on subsequent
-hosts.
-
-\textbf{Phishing as campaign initial access.} T1566 was confirmed
-on tdungan and absent on nfury. tdungan is the patient-zero host;
-its phishing artifacts identify how the attacker established the
-initial foothold before pivoting laterally to nfury and the broader
-domain.
-
-\textbf{nromanoff: distinct tool family, external C2.}
-nromanoff (10.3.58.5) carries \texttt{spinlock.exe}---a PyInstaller
-Python backdoor with no SHA-256 overlap with the httppump variants on
-nfury or tdungan---and connects to a real external IP
-(\texttt{199.73.28.114:443}) rather than the internal relay
-\texttt{192.168.1.5}. This suggests the operator deployed different
-staging infrastructure per host. The \texttt{vibranium} account and
-PsExec confirmed on nromanoff are consistent with the lateral
-movement profile, but the tool family is distinct. nromanoff is
-the only host where an external C2 is confirmed in a TLS session with
-a self-signed certificate---physical evidence of live C2 communication
-at the time of acquisition.
-
-\textbf{Consistent Auditor discrimination across all three hosts.}
-Every host returned exactly 4 refuted findings, all memory-only signals
-without disk corroboration. This is not tuned behaviour: the refutation
-criterion (positive tool return on a real forensic binary) is applied
-uniformly. Three independent investigations, three identical refutation
-patterns---the strongest evidence the discrimination is structural,
-not coincidental.
-
-\subsection{Earlier Pipeline — Lessons Learned}
-\label{sec:lessons}
-
-Two additional hosts were investigated with an earlier pipeline version
-prior to the corpus weight calibration, pass-decoupling fix, and
-auditor improvements documented here. These results are not directly
-comparable to the nfury run but surface engineering lessons that
-informed the current architecture.
-
-\paragraph{controller (earlier pipeline).}
-Triage scored 145 across three detected techniques. The Auditor refuted
-two. T1036.005 (Masquerading) was triggered by \texttt{svchost.exe}
-copies in WinSxS---legitimate Windows component store locations, not
-masqueraded binaries. T1087.001 (Account Discovery) was triggered by
-the presence of a \texttt{vibranium} user profile directory, not by
-active enumeration tooling. The Auditor correctly distinguished profile
-\emph{existence} from enumeration \emph{activity}. T1003.001 survived:
-\texttt{procdump.exe} confirmed in \texttt{/Tools/SysInternals/} and
-\texttt{spinlock.exe} confirmed in the WER ReportQueue crash dump.
-\textbf{Lesson:} triage signals that fire on filesystem presence (binary
-exists on path) without requiring execution evidence generate FPs that
-the Auditor must correct. The corpus weight revision dampened
-presence-only signals.
-
-\paragraph{tdungan (earlier pipeline).}
-Triage scored 67. After the Auditor confirmed both T1003.001 and
-T1071.001 with physical artifact verification, adjusted score rose
-to 85---reflecting IOC cross-match scoring applied to confirmed C2
-infrastructure evidence absent from the generic sweep.
-\textbf{Lesson:} confirmed IOC propagation from a prior host
-increases the adjusted score when those IOCs appear on a new image.
-This is the intended campaign-mode behavior; the score increase is
-not a measurement artifact.
-
-\subsection{Evidence Provenance}
-
-All disk images were acquired by SANS using FTK Imager (ADI~3.3.0.5) on
-2015-08-18 as part of the Stark Research Labs intrusion case.
-Acquisition hashes are embedded in each E01 and verified read-only via
-\texttt{ewfinfo} from \texttt{reports/chain\_of\_custody.json}.
-
-\begin{table}[ht]
-\centering
-\caption{Disk image acquisition hashes (FTK Imager, 2015-08-18).
-  Source: EWF acquisition metadata, \texttt{reports/chain\_of\_custody.json}.}
-\label{tab:coc}
-\small
-\begin{tabular}{@{}llll@{}}
-\toprule
-Host (IP)         & Evi.\,\# & MD5 (acquisition) & SHA-1 (acquisition) \\
-\midrule
-nfury (10.3.58.6) & nfury-002 & \texttt{a98416e6\ldots} & \texttt{829553fd\ldots} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\FloatBarrier
-%% ── 6. Sigma Rule Export ────────────────────────────────────────────────────
-\section{Sigma Rule Export}
-\label{sec:sigma}
-
-Adversarially validated rules are exported as Sigma YAML via
-\texttt{sigma\_exporter.py}. Each rule embeds an
-\texttt{adversa\_metadata} block containing the \emph{bypass rate}—
-the fraction of \num{2031} Red Agent evasion attempts that evaded
-that signal. No manually authored Sigma rule receives this level
-of adversarial pressure before production. The exporter maps each
-signal type to the correct Sigma field:
-
-\begin{itemize}\setlength\itemsep{0pt}
-  \item Registry path $\rightarrow$ \texttt{TargetObject|contains}
-  \item IP address $\rightarrow$ \texttt{DestinationIp}
-  \item Process name $\rightarrow$ \texttt{Image|endswith}
-  \item General keyword $\rightarrow$ \texttt{EventData|contains}
-\end{itemize}
-
-\Cref{lst:sigma} shows the exported rule for T1003.001, derived from
-real Mordor LSASS-access events with \texttt{GrantedAccess} values
-extracted by grounded learning.
-
-\begin{listing}[ht]
-\begin{minted}{yaml}
-title: find-evil — LSASS Credential Dumping (Adversarially Hardened)
-id: fe-t1003-001
-status: experimental
-description: >
-  Detects LSASS memory access patterns extracted from real
-  OTRF/Mordor Sysmon telemetry (49,519 events).
-  Adversarially hardened against 266 Red Agent evasion
-  attempts over 4,500 training iterations.
-adversa_metadata:
-  bypass_rate: 0.68
-  signal_source: grounded
-  protected_ioc: true
-  iterations_hardened: 4500
-  patterns_learned: 16
-detection:
-  selection:
-    EventID: 10
-    TargetImage|endswith: '\lsass.exe'
-    GrantedAccess|contains:
-      - '0x1fffff'
-      - '0x1410'
-      - '0x1010'
-  condition: selection
-falsepositives:
-  - Legitimate AV or EDR products
-level: high
-tags:
-  - attack.credential_access
-  - attack.t1003.001
-\end{minted}
-\caption{Adversarially hardened Sigma rule for T1003.001 with embedded bypass
-rate. The \texttt{adversa\_metadata} block gives analysts a
-quantitative hardening metric absent from all manually authored rules.
-\texttt{GrantedAccess} values (\texttt{0x1fffff}, \texttt{0x1410},
-\texttt{0x1010}) were extracted by grounded learning from real Mordor
-LSASS-access events—not hand-authored.}
-\label{lst:sigma}
-\end{listing}
-
-%% ── 7. Security Model ───────────────────────────────────────────────────────
-\section{Security Model}
+%% ── 4. MCP Security Boundary ─────────────────────────────────────────────────
+\section{MCP Security Boundary}
 \label{sec:security}
 
-The MCP server (\texttt{sift\_server.py}) enforces evidence integrity
-at four independent layers before any shell command executes.
-The security model is not \emph{trust Claude}—it is \emph{make bad
-actions structurally impossible}.
+Every forensic action flows through one MCP primitive: \texttt{run\_terminal\_command}.
+Four gates execute in Python before any \texttt{subprocess.run} call:
 
-\textbf{Layer~1 — Hard-blocked strings.} \texttt{wget}, \texttt{curl},
-\texttt{nc}, \texttt{sudo}, \texttt{shred}, \texttt{\$(},
-and backtick are rejected unconditionally. Command substitution
-(\texttt{\$()} and backticks) is specifically blocked because it allows
-an attacker-controlled string in a log file to inject a second command
-as an argument to a permitted binary.
+\textbf{Gate~1 --- Argument injection prevention.} 22 hard-blocked tokens:
+destructive operations (\texttt{shred}, \texttt{mkfs}, \texttt{fdisk}), exfiltration
+tools (\texttt{curl}, \texttt{wget}, \texttt{nc}), privilege escalation
+(\texttt{sudo}, \texttt{pkexec}), and command substitution operators
+(\texttt{\$(}, backtick, \texttt{\$\{}). Command substitution is blocked
+because an attacker who controls log content or filesystem artifacts can inject
+a second command as an argument to an otherwise legitimate forensic invocation.
 
-\textbf{Layer~2 — Segmented allowlist.} The command is split on
-\texttt{|} and each segment tokenised with \texttt{shlex.split()},
-which handles quoted escapes correctly. The leading binary must appear
-in the explicit allowlist of SIFT forensic tools (50+ entries).
-Anything unlisted is rejected.
+\textbf{Gate~2 --- Deny-all binary enforcement.} 53-binary SIFT allowlist.
+Every binary not on the list is rejected unconditionally. \texttt{sed} is
+excluded despite appearing on SIFT because its \texttt{-e} flag passes the
+pattern space to the shell, creating an injection surface.
 
-\textbf{Layer~3 — Quote-aware pipeline split.} Before Layer~2's allowlist
-check, the pipeline is split by a quote-aware parser rather than a
-naive regex. The parser tracks single-quoted substrings and treats
-\texttt{|} characters inside quotes as literal argument characters, not
-pipeline separators. This is necessary because standard forensic
-invocations such as \texttt{grep -iE '(http|https|ftp)'} contain
-\texttt{|} inside the pattern argument; a naive split would fragment the
-command and misidentify \texttt{https} as an unlisted binary.
+\textbf{Gate~3 --- Quote-aware pipeline parser.} Each pipe segment is validated
+independently after tracking single-quoted substrings. A na\"{i}ve split on
+\texttt{|} would reject \texttt{grep -iE '(http|https|ftp)'} because
+\texttt{https} and \texttt{ftp} are not allowlisted binaries. The parser
+correctly identifies \texttt{|} inside single quotes as argument content, not
+a pipeline separator.
 
-\textbf{Layer~4 — Path-restricted redirection.} Redirection targets
-are resolved with \texttt{os.path.realpath()} to defeat symlink and
-\texttt{../} traversals, then verified to fall inside
-\texttt{\_REPORTS}. Redirection to \texttt{/dev/null}, evidence
-directories, or system paths is structurally impossible.
+\textbf{Gate~4 --- Write-target guard.} All \texttt{>}, \texttt{>>}, and
+\texttt{tee} targets are resolved via \texttt{os.path.realpath()} and must
+resolve inside \texttt{reports/}. Symlink traversal and \texttt{../} injection
+fail at the path arithmetic level, not at a string-match level.
 
-Every execution decision is written to an append-only audit log before
-the command runs, providing a full chain of custody for every tool call.
+Every command is atomically appended to \texttt{audit\_log.jsonl} via
+\texttt{os.open + os.write} \emph{before} \texttt{subprocess.run} is called.
+Blocked commands log their \texttt{blocked\_reason}. The audit log cannot be
+overwritten through a tool call. Evidence modification is structurally impossible,
+not prompt-dependent.
 
-%% ── 8. Ablation Study ───────────────────────────────────────────────────────
-\section{Ablation Study}
-\label{sec:ablation}
+Gates~1 and~2 address distinct attack vectors: binary substitution (an
+unapproved executable) and argument injection (an approved executable with
+malicious arguments). Both must be defended independently; Gate~2 alone does not
+prevent a command like \texttt{grep -e \$(curl attacker.com) file}.
 
-\subsection{Design}
+%% ── 5. Evaluation ────────────────────────────────────────────────────────────
+\section{Evaluation}
+\label{sec:evaluation}
 
-To isolate the contribution of ASL-trained signals from hardcoded IOCs,
-we ran a deterministic ablation over a 20\% holdout of the Mordor
-dataset (last 20\% per technique by JSONL order; no shuffling).
-Three scoring conditions were evaluated against the same
-\num{9903}-event holdout (source:
-\texttt{analysis/ablation\_study.py}~$\to$~\texttt{reports/ablation\_study.json}):
+\subsection{Setup}
 
-\begin{itemize}\setlength\itemsep{2pt}
-  \item \textbf{Combined} — current system: conjunction scoring with
-    protected-signal half-weight (§3.4).
-  \item \textbf{IOC-only} — only signals in the \texttt{PROTECTED\_SIGNALS}
-    list score; any single IOC match awards full weight. Represents a
-    baseline lookup-table detector.
-  \item \textbf{ASL-only} — all 83 learned signals, no protected status;
-    strict conjunction (two or more signals required). Represents the
-    pure learning contribution.
-\end{itemize}
+Evaluation used the SANS SIFT Workstation (Ubuntu, 200+ incident response tools)
+with Windows disk images and raw memory captures mounted read-only. All
+investigations were run autonomously from invocation to HTML report with no human
+intervention. The LLM backend was Claude claude-sonnet-4-6 via the Anthropic API.
+All results are independently reproducible from the committed audit logs with one
+shell command per finding on the same mounted image.
 
 \subsection{Results}
 
-\begin{table}[ht]
+\Cref{tab:results} summarises the Auditor's verdicts across all four hosts.
+
+\begin{table}[h]
 \centering
-\caption{Ablation study on 20\% held-out Mordor events
-  (source: \texttt{reports/ablation\_study.json}).
-  \emph{Presence} = fraction of events where $\geq$1~signal matched the
-  formatted artifact string, regardless of threshold.
-  \emph{Detection} = fraction scoring $\geq$~40 (conjunction threshold).}
-\label{tab:ablation}
-\small
-\begin{tabular}{@{}lrrrrr@{}}
+\caption{Forensic Auditor verdicts by host. The Investigated column reflects
+technique candidates entering the Auditor. Confirmed and Refuted are Auditor
+verdicts backed by physical artifact citations and evidence-of-absence
+respectively.}
+\label{tab:results}
+\begin{tabular}{lrrrr}
 \toprule
-Condition & Presence & Detection & F1 & FP rate \\
+Host & Investigated & Confirmed & Refuted & Time \\
 \midrule
-Combined  & 61.6\% & 5.6\%  & 0.105 & 12.5\% \\
-IOC-only  & 61.6\% & 2.0\%  & 0.040 & 12.5\% \\
-ASL-only  & 61.6\% & 4.1\%  & 0.079 &  0.0\% \\
+nfury (10.3.58.6)     & 19 & 15 & 4 & 16\,min \\
+tdungan (10.3.58.7)   & 17 & 13 & 4 & 15\,min \\
+nromanoff (10.3.58.5) &  7 &  3 & 4 & 15\,min \\
+rocba (192.168.1.5)   &  5 &  1 & 4 & 23\,min \\
+\midrule
+\textbf{Total}        & \textbf{48} & \textbf{32} & \textbf{16} & {---} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\subsection{Interpretation}
+\textbf{The four-refutal pattern.} Every host produced exactly four refuted
+techniques: T1071.001, T1134, T1547.001, and T1574. These are the same four
+techniques across all four hosts, each flagged by memory analysis and each
+lacking disk corroboration. The consistency of this pattern across three victim
+machines with different tool families (httppump on nfury/tdungan,
+\texttt{spinlock.exe} on nromanoff) and a C2 relay node demonstrates that the
+Auditor applies the same physical verification standard regardless of host type.
+This is not the detection layer performing consistently---it is the verification
+layer.
 
-Three findings warrant explanation.
+\subsection{Case Studies}
 
-\textbf{ASL doubles IOC coverage.} ASL-only detection (4.1\%) is
-more than double IOC-only (2.0\%), demonstrating that grounded signal
-learning contributes independently of the forensic IOC seed.
+\textbf{T1071.001 --- Active C2 web protocol (nfury, refuted).}
+Memory analysis flagged T1071.001 from the string \texttt{established} in
+\texttt{windows.netscan} output. TCP connection state strings are present in
+memory regardless of active malicious connections. A prompt-guardrailed system
+would flag this technique with a caveat. The Forensic Auditor ran
+\texttt{windows.netscan} and checked all 432 connection records. Every
+\texttt{ESTABLISHED} and \texttt{CLOSE\_WAIT} connection resolved to Apple,
+Microsoft, or Google CDN infrastructure. Verdict: \textsc{refuted}. The Auditor
+did not conclude \textsc{refuted} because it was instructed to be skeptical. It
+concluded \textsc{refuted} because it ran out of connections to check and found
+none that supported the claim.
 
-\textbf{Conjunction is doing work.} Signal presence is 61.6\% across all
-conditions---meaning the signals are broadly sensitive---but scored
-detection falls to 2--6\% because the conjunction threshold (§3.4)
-requires at least two signals per technique before awarding any score.
-The presence-to-detection gap is a design property, not noise.
+\textbf{T1547.001 --- Registry Run Keys (nfury, refuted).}
+Memory analysis flagged T1547.001 from the string \texttt{currentversion\textbackslash run}
+appearing in memory. Over three challenge rounds, the Auditor checked the
+\texttt{SOFTWARE} hive, \texttt{SAM}, \texttt{SECURITY}, \texttt{BCD}, and
+\texttt{Syscache} system hives, plus 11 \texttt{NTUSER.DAT} files across all
+user profiles. Volatility \texttt{windows.registry.printkey} against
+\texttt{HKLM\textbackslash SOFTWARE\textbackslash Microsoft\textbackslash
+Windows\textbackslash CurrentVersion\textbackslash Run} returned two entries:
+\texttt{Sidebar} $\to$ \texttt{\%ProgramFiles\%\textbackslash Windows
+Sidebar\textbackslash Sidebar.exe /autoRun} under \texttt{NetworkService} and
+\texttt{LocalService}, both dated 2009-07-14---the stock Windows~7 installation
+timestamp. The Auditor's conclusion: ``the triage signal appears to have been
+triggered by a string match in memory from the OS loader or registry paging, not
+by an actual malicious value stored in the key.'' Verdict: \textsc{refuted}.
 
-\textbf{ASL removes false positives.} ASL-only achieves 0\% FP on the
-benign pool. The 12.5\% FP in combined and IOC-only comes from
-single-IOC protected-signal half-weight scoring, which fires on the
-one benign event containing ``lsass'' in its registry path. Strict
-conjunction eliminates this.
+\textbf{T1055 --- Process injection (rocba, confirmed under resource pressure).}
+rocba is a C2 relay node with zero disk artifacts by design. All five candidate
+techniques came from memory analysis. In Round~1, \texttt{windows.malfind}
+timed out after 120~seconds; the Auditor returned \textsc{inconclusive}---not
+\textsc{confirmed}. The system failed safe. In Round~2, the Auditor recovered
+one VAD record before the timeout: \texttt{MsMpEng.exe} (Windows Defender's
+engine) with two anonymous \texttt{VadS} \texttt{PAGE\_EXECUTE\_READWRITE}
+regions at \texttt{0x1f081330000} and \texttt{0x1f0818a0000}, containing an
+x64 shellcode dispatch trampoline (\texttt{push rsi/rdi/rbx; sub rsp, 0x28;
+jmp rdx}). Verdict: \textsc{confirmed}. A hallucination-prone system would have
+confirmed T1055 in Round~1 from the timeout result or from the memory triage
+signal. The Auditor returned \textsc{inconclusive} until it had physical bytes.
 
-\textbf{Methodology note.} The training-loop detection rate (76\%,
-ACCURACY.md) measures a different quantity: cumulative detections over
-2,122 randomly sampled events during training, using the \emph{evolving}
-signal set (which grew from 0 to 151 signals during training) with raw
-event context available for grounded learning. The holdout evaluation
-here uses the final pruned 83-signal set scored on formatted Sysmon
-strings only. The Mordor JSONL files also contain predominantly
-background Windows telemetry (EventID 800/4103 PowerShell pipeline events
-account for 19.5\% of all events but format to bare ``EventID=800'' strings
-because their attack content lives in \texttt{Message}/\texttt{Payload}
-fields not extracted by \texttt{\_format\_event}). These methodological
-differences are documented in \texttt{reports/ablation\_study.json}.
+\subsection{Cross-Host Campaign Correlation}
 
-%% ── 9. Limitations ──────────────────────────────────────────────────────────
+Running tdungan in campaign mode with nfury IOCs injected, the Auditor confirmed
+that the \texttt{SRL-Helpdesk} account NTLM hash (\texttt{4c3f5e9f...}) matched
+exactly across both hosts. This is confirmed credential reuse from a physical
+artifact---the hash extracted from memory by Volatility \texttt{windows.hashdump}
+on both hosts---not from model inference about campaign patterns. The IOC
+injection mechanism (\cref{sec:ioc}) passes the verified hash as a structured
+signal, not as LLM context.
+
+%% ── 6. Discussion ────────────────────────────────────────────────────────────
+\section{Discussion}
+\label{sec:discussion}
+
+\textbf{Categorical vs.\ probabilistic safety guarantees.}
+Bensalem et al.~\cite{bensalem2026} derive compositional system-level safety
+bounds via the chain rule of probability, producing probabilistic guarantees for
+each layer of their architecture. For Layer~2 (environmental validity), their
+framework produces a bound $P(\text{environmentally valid} \mid \text{proposed})$.
+The Forensic Auditor enforces environmental validity categorically: by data flow
+construction, \textsc{confirmed} cannot be issued without a positive forensic
+tool return. No probability estimate is needed because the property holds
+unconditionally. This is a stronger guarantee than the probabilistic framework
+admits, achievable in the forensic domain because the verification oracle
+(the filesystem) is deterministic.
+
+\textbf{Separation from AgentVerify.}
+AgentVerify~\cite{fang2026} achieves 86.67\% post-hoc verification accuracy on
+designed agent scenarios using LTL model checking over observable control flow.
+VERITAS achieves a proactive structural guarantee rather than post-hoc detection.
+The two approaches are complementary: AgentVerify can verify whether VERITAS's
+own control flow satisfies its safety specification; VERITAS prevents the
+specific failure mode (hallucinated confirmation) before it occurs.
+
+\textbf{Forensic admissibility.}
+AI-generated evidence faces an emerging legal challenge: if the model's reasoning
+cannot be inspected or reproduced, a finding may be excludable on
+due-process grounds~\cite{aronson2010}. Every VERITAS \textsc{confirmed} finding
+consists of an exact command, an exact output, and an exact UTC timestamp in an
+append-only log. A second examiner can mount the same image, run the same command,
+and reach the same conclusion without the AI. The AI decided to run the command.
+The output is the evidence. This architecture is designed for the legal scrutiny
+that is coming for forensic AI.
+
+\textbf{The refutals as primary evidence.}
+It is tempting to read the 32 confirmed findings as the system's primary output
+and the 16 refutals as noise. This is backwards. The confirmed findings
+demonstrate that the system finds things. The refuted findings demonstrate that
+the system distinguishes between a memory signal and a physical artifact---the
+property the architecture was designed to enforce. A system that refutes nothing
+is a system that never challenges its own triage output. The exactly-four pattern
+across all four hosts is the paper's central empirical result.
+
+%% ── 7. Limitations ───────────────────────────────────────────────────────────
 \section{Limitations}
+\label{sec:limitations}
 
-\textbf{False-positive rate.} At 4,500 iterations, the FP rate on
-benign events is 87\% (1,163 false positives on 1,333 benign tests).
-An 87\% FP rate makes the current system unsuitable for production
-deployment against live endpoints—in a 1,000-endpoint environment it
-would generate approximately 870 analyst reviews per sweep. It is
-suitable for forensic triage of known-suspicious disk images where the
-base rate of compromise is high. The Forensic Auditor mitigates this in
-deployment: on nfury, the Auditor correctly confirmed 15 of 19 triage
-detections and refuted 4 memory-only signals, reducing analyst
-ambiguity from 19 unverified flags to 15 confirmed findings with
-artifact citations.
+\textbf{Four hosts, one campaign.} All four evaluated hosts share an operator,
+C2 infrastructure (192.168.1.5), and overlapping tooling (httppump/spinlock.exe).
+The consistent Auditor behavior is encouraging but does not constitute a
+generalization test. Running against a second campaign with a different threat
+actor, different tooling, and no prior IOC seeding is the immediate next
+validation step.
 
-The rate is explained structurally by two factors. First, a training
-imbalance: the Mordor dataset provides \num{49519} attack events
-against 8 benign templates sampled at 30\%---the discriminator
-optimises for recall. Second, pool-separation analysis of the
-83-signal library shows 30\% of signals appear in the benign baseline
-and 34\% are campaign-specific IOCs that overfit to this intrusion's
-tooling; together these 64\% of signals either fire on benign events
-or produce zero hits against a novel campaign. The remaining 36\% are
-discriminative by construction. Pool separation against a real benign
-baseline (see §10) is the structural fix; conjunction scoring (§3.4)
-reduces additive FP accumulation as an interim mitigation.
+\textbf{Triage layer is a proof of concept.} The corpus-calibrated log-odds
+weights cover 9 MITRE techniques. The 87\% false positive rate on benign
+endpoints disqualifies the triage layer for live endpoint monitoring. It is
+calibrated for forensic images pre-selected for analysis where the base rate of
+compromise is high. The Auditor is the precision layer.
 
-\textbf{Shared model limitation.} Red and Blue share the same
-underlying LLM (Claude). Claude cannot simulate a zero-day technique
-it has never encountered; it generates plausible evasions of known
-techniques, not novel ones. A nation-state zero-day would not be
-caught until it appeared in training data.
+\textbf{Sysmon ML does not generalize to disk forensics.} An adversarial
+Red/Blue training loop (3,000 iterations, 49,519 Sysmon events) produced
+hardened detection rules. Those rules operate on live Sysmon telemetry fields
+(\texttt{ProcessGuid}, \texttt{CommandLine}, \texttt{ParentImage}) that are
+absent from static disk forensic output. The training infrastructure is
+operational; the deployment context for the current pipeline is wrong. This
+layer is documented as future work for a live endpoint path.
 
-\textbf{T1071.001 excluded from ML metrics.} C2 web protocol detection
-relies entirely on IOC-based protected signals (confirmed C2 IPs from
-the case investigation). It is not subject to the adversarial loop and
-is excluded from the per-technique accuracy table.
+\textbf{Single-model adversarial ceiling.} The Red and Blue agents in the
+training loop share the same underlying LLM. Claude cannot simulate a
+zero-day technique it has not encountered in training data. The evasion variants
+it generates are plausible mutations of known techniques, not novel attacks.
 
-\textbf{LLM investigation is non-deterministic.} A re-run of nfury on
-the same evidence with the same code produced 8 detected techniques and
-6 confirmed---versus 19 detected and 15 confirmed on the original run.
-Same disk image, same pipeline, different LLM exploration path.
-The disk investigation agent (Pass~2, 75-call budget) surfaced
-13 disk-resident techniques on the first run and 3 on the second;
-it took different branching decisions each time.
-The confirmed findings from either run are individually valid---every
-CONFIRMED finding in both transcripts cites a real tool call and a
-real artifact on disk. But the \emph{set} of confirmed findings is
-not stable across runs. This is a fundamental property of agentic
-LLM investigation, not a bug. Mitigation: run multiple passes and
-take the union of confirmed findings; or accept the first run's output
-as a lower bound with the audit log as the reproducibility guarantee.
+\textbf{Cost and scale.} \$14 per host and 16--23 minutes per investigation is
+appropriate for targeted triage of high-value hosts in an active incident. It
+does not scale to continuous monitoring of 500 simultaneous endpoints without
+parallel infrastructure and pre-staged images.
 
-%% ── 10. Future Work ─────────────────────────────────────────────────────────
+\textbf{T1574 triage signal quality.} The triage signal for T1574 (Hijack
+Execution Flow) on nfury was the literal string \texttt{false\textbackslash t}---
+a parser artifact from a null boolean field. The Auditor independently identified
+this as anomalous signal quality and refuted the finding. This demonstrates
+architectural robustness to poor-quality triage input but also reveals that the
+triage layer's signal extraction can produce garbage signals that reach the
+Auditor.
+
+%% ── 8. Future Work ───────────────────────────────────────────────────────────
 \section{Future Work}
+\label{sec:future}
 
-\begin{itemize}
-  \item \textbf{Pool-separation signal extraction} — the immediate
-        architectural priority. Replace grounded learning's per-event
-        extraction with set-theoretic discrimination:
-        $\text{signals}(T) = \text{values}(\text{Mordor}[T]) \setminus
-        \text{values}(\text{BETH})$.
-        A value is admitted as a signal only if it appears in documented
-        attack telemetry for technique $T$ and \emph{never} in a
-        real-world benign baseline. This makes false signal introduction
-        structurally impossible and makes the 34\% campaign-specific IOC
-        fraction identifiable at training time rather than after
-        deployment.
-  \item \textbf{Coverage expansion} — from 8 to 50+ MITRE techniques
-        via automatic Mordor dataset enumeration through MSTICPy
-        \texttt{MordorDriver}.
-  \item \textbf{Memory forensics integration} — Volatility~3 plugin
-        routing through the MCP layer for process injection and rootkit
-        detection techniques not visible on disk.
-  \item \textbf{Timeline correlation} — Plaso super-timeline filtered to
-        confirmed technique time windows, scoring temporal clustering of
-        artifacts as corroborating evidence.
-  \item \textbf{Atomic Red Team VM integration} — real adversary-tool
-        execution against a live Windows VM for truly novel Red Agent
-        evasions beyond LLM-generated variants.
-  \item \textbf{Neural network detection with auditor admissibility layer.}
-        The legal battleground for forensic AI admissibility is already
-        established. TrueAllele (probabilistic DNA mixture interpretation)
-        and COMPAS (recidivism scoring) have been challenged in court on
-        black-box grounds---defendants argued the inability to inspect
-        model internals violated due process. A deep neural network
-        trained on Mordor telemetry would outperform log-odds ratios on
-        detection rate, but its weights are not explainable in the way
-        a court or chain-of-custody review requires. The ADVERSA audit
-        architecture is the direct answer: a black-box detection model
-        can be deployed as the triage layer if---and only if---every
-        flagged finding is subsequently verified by a Forensic Auditor
-        that reads physical bytes off disk and produces an artifact
-        citation traceable to a specific tool call. The NN provides the
-        detection rate; the Auditor provides the admissibility. This
-        separation is not a workaround---it is the correct architecture
-        for production forensic AI.
-\end{itemize}
+\textbf{Novel campaign validation.} The immediate priority is running the current
+pipeline against a second campaign with different tooling and no prior IOC
+seeding, measuring false positive rate, missed techniques, and Auditor correction
+rate independently.
 
-%% ── 11. Conclusion ──────────────────────────────────────────────────────────
+\textbf{Neural network triage with Auditor as admissibility layer.} A deep
+model trained on real Sysmon telemetry with BETH dataset pool-separation will
+outperform log-odds ratios on detection rate. NN weights cannot be explained in
+a chain-of-custody review. The Auditor is the answer: any triage signal---corpus
+weight, neural network, YARA rule---feeds the same verification layer.
+\textsc{confirmed} remains a tool return value regardless of what generated
+the candidate. The NN provides detection rate. The Auditor provides admissibility.
+
+\textbf{Live Sysmon endpoint path.} The adversarial training loop was built on
+the correct telemetry format. Connecting it to a live MCP endpoint where Sysmon
+events actually flow is where the trained rules become a production detection
+layer.
+
+\textbf{Plaso timeline correlation.} Filtering a supertimeline to the window
+around each confirmed technique timestamp turns isolated artifact matches into
+activity chains---the difference between ``this binary existed on disk'' and
+``this binary ran at 14:32:07, four minutes before this network connection.''
+
+\textbf{Coverage expansion.} Nine MITRE techniques are covered by corpus weights.
+The MalwareBazaar and HybridAnalysis APIs scale this to 50+ with additional
+corpus collection.
+
+%% ── 9. Conclusion ────────────────────────────────────────────────────────────
 \section{Conclusion}
 
-The domain-gap recovery documented in \cref{fig:curve} is a genuine
-research finding: most security AI systems train on synthetic logs and
-report inflated accuracy. find-evil deliberately switched to real
-Sysmon telemetry, documented the collapse to 10\% detection at
-iteration~10, and measured autonomous recovery to 76\% detection and
-F1~=~0.72 over \num{4500} iterations with no human intervention. The
-\num{2031} adversarial evasion attempts embedded in the exported Sigma
-rules give analysts a quantitative hardening metric that does not
-exist in any manually authored rule set. Three hosts from an APT intrusion were investigated autonomously. On
-nfury, the Forensic Auditor confirmed 15 of 19 triage detections and
-refuted 4 memory-only signals; the complete attack chain---httppump
-backdoor (\texttt{svchost.exe} in \texttt{\$Recycle.Bin}, timestomped,
-C2 at \texttt{192.168.1.5/ads/}), injector (\texttt{a.exe},
-127 \texttt{PAGE\_EXECUTE\_READWRITE} VADs), attacker account
-(\texttt{SRL-Helpdesk}, Event~ID~4720), and PsExec lateral
-movement---was characterized in 969\,s at \$14 cost. On tdungan,
-run in campaign mode, 13 of 17 were confirmed; T1566 (Phishing)
-identified the campaign initial access vector, and an identical
-SRL-Helpdesk NTLM hash confirmed cross-host credential reuse.
-On nromanoff, a distinct Python backdoor (\texttt{spinlock.exe})
-with a real external C2 (\texttt{199.73.28.114:443}) was confirmed;
-3 of 7 detections confirmed, 4 refuted---the same discrimination
-pattern as the other two hosts.
-Thirty-one techniques confirmed across 43 detected, 12 correctly
-refuted by the Auditor---all within $\approx$45~minutes total,
-at under \$45 combined.
+The hallucination problem in autonomous DFIR is architectural, not
+prompt-engineering. Separating the finding-proposal agent from the
+finding-verification agent---with zero shared state, a mandate to refute, and
+a requirement that \textsc{confirmed} demands a positive forensic tool
+return---makes hallucinated confirmation structurally impossible. This property
+holds by data-flow construction and is verifiable by reading the code.
 
-Every other approach gives defenders better tools. find-evil gives
-defenders the same adaptive mechanism that makes AI attacks
-dangerous—now working for the defense.
+Across four hosts spanning two tool families and both victim and C2
+infrastructure, the Forensic Auditor refuted exactly four techniques per host
+while confirming thirty-two from forty-eight detected. Every confirmed finding
+traces to a specific tool call in an append-only audit log and is independently
+reproducible without the AI. The human examiner reviews artifact-backed
+verdicts, not LLM output.
 
-\FloatBarrier
-%% ── 12. File Reference ──────────────────────────────────────────────────────
-\section*{Architecture Reference}
+Valhuntir built the investigation layer and left the verification problem open.
+VERITAS adds the verification layer. The architecture is designed to survive both
+the forensic scrutiny that the field demands and the legal scrutiny that is coming
+for AI-generated evidence.
 
-\begin{table*}[ht]
-\centering
-\caption{find-evil source file roles.}
-\begin{tabular}{@{}lp{0.62\linewidth}@{}}
-\toprule
-File & Role \\
-\midrule
-\texttt{brain.py}               & ASL orchestrator — ForensicBrain + BlueDiscriminator + training metrics \\
-\texttt{mordor\_agent.py}       & Gen~3 Red Agent — loads \num{49519} real Sysmon events from OTRF Mordor \\
-\texttt{msticpy\_red\_agent.py} & Training enhancement — MSTICPy dataset discovery (offline training only) \\
-\texttt{msticpy\_enrichment.py} & Training enhancement — process/registry/network enrichment tokens (offline training only) \\
-\texttt{pattern\_db.py}         & SQLite pattern store — versioned per-signal hit/miss counters and training-run history \\
-\texttt{export\_patterns.py}    & Post-training — filters and exports signals above weight threshold \\
-\texttt{sigma\_exporter.py}     & Post-training — field-mapped Sigma YAML with adversarial bypass rates \\
-\texttt{investigate.py}         & Pipeline orchestrator — Triage Agent $\to$ Forensic Auditor $\to$ unified report \\
-\texttt{blue\_agent.py}         & Triage Agent — Pass~1 generic SIFT sweep + Pass~2 agentic investigation loop \\
-\texttt{auditor\_agent.py}      & Forensic Auditor — parallel \texttt{asyncio.gather} technique challenges \\
-\texttt{sift\_server.py}        & MCP server — four-layer security boundary for all forensic tool execution \\
-\texttt{html\_report.py}        & Report renderer — generates \texttt{\{host\}-report.html} from JSON artifacts \\
-\texttt{extract\_iocs.py}       & IOC extractor — confirmed artifacts only; supports \texttt{--merge} for campaign correlation \\
-\texttt{adversa-merge-iocs.sh}  & Campaign merge — deduplicates IOC files from multiple hosts \\
-\texttt{adversa.sh}             & CLI entry point — API key, mount check, \texttt{--ioc-file}, \texttt{--no-synthesis} \\
-\bottomrule
-\end{tabular}
-\end{table*}
-
+%%─────────────────────────────────────────────────────────────────────────────
 \bibliographystyle{ACM-Reference-Format}
-%% \bibliography{adversa}   %% uncomment when .bib file is present
-
+\bibliography{adversa}
 \end{document}

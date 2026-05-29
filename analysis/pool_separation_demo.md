@@ -1,3 +1,7 @@
+---
+nav_exclude: true
+---
+
 # Pool Separation Demo — Discriminative Signal Extraction
 
 **Source:** Mordor attack datasets + BENIGN_TEMPLATES in mordor_agent.py  

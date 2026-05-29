@@ -1,3 +1,7 @@
+---
+nav_exclude: true
+---
+
 # Evasion Sample — Red Agent Signature Mutation Evidence
 
 **Source:** `reports/brain_state.json.corrupted`  

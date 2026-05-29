@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-find-evil / ADVERSA — Adversarial Forensic Investigator
+find-evil / VERITAS — Adversarial Forensic Investigator
 SANS DFIR Hackathon 2026  |  Category 7: Persistent Learning Loop
 
 Trains a Red vs Blue adversarial loop on real Sysmon telemetry,
@@ -21,7 +21,7 @@ _TRIAGE  = os.path.join(_HERE, 'fast-triage')
 
 BANNER = """\
 ╔══════════════════════════════════════════════════════════════╗
-║   find-evil / ADVERSA  ·  Adversarial Forensic Investigator  ║
+║   find-evil / VERITAS  ·  Adversarial Forensic Investigator  ║
 ║   SANS DFIR Hackathon 2026  ·  Persistent Learning Loop      ║
 ╚══════════════════════════════════════════════════════════════╝"""
 

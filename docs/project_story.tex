@@ -1,4 +1,4 @@
-%% find-evil / ADVERSA — Project Story (Devpost narrative)
+%% find-evil / VERITAS — Project Story (Devpost narrative)
 %% SANS DFIR Hackathon 2026 | Category 7: Persistent Learning Loop
 
 \documentclass[10pt, letterpaper]{article}
@@ -41,7 +41,7 @@
 
 %% ── Header ──────────────────────────────────────────────────────────────────
 \begin{center}
-  {\LARGE\bfseries\color{accent} find-evil / ADVERSA}\\[3pt]
+  {\LARGE\bfseries\color{accent} find-evil / VERITAS}\\[3pt]
   {\large Adversarial Forensic Verification for Windows Incident Response}\\[2pt]
   {\small SANS DFIR Hackathon 2026 \quad|\quad Category 7: Persistent Learning Loop}
 \end{center}
@@ -69,7 +69,7 @@ careful, to be skeptical, to only report confirmed findings. Prompt
 controls are not security controls. They can be overridden, forgotten,
 or simply ignored when the model is confident.
 
-ADVERSA answers a different question: what if the architecture
+VERITAS answers a different question: what if the architecture
 \emph{itself} made hallucinating a confirmed finding structurally
 impossible? Not unlikely. Impossible. A finding is only confirmed when a
 second independent agent---one instructed to distrust the first---calls
@@ -77,13 +77,13 @@ a forensic tool and reads the actual bytes off the disk. If the file is
 not there, the technique is refuted. No amount of model confidence
 changes that.
 
-That is the adversarial dynamic in ADVERSA: not Red vs.\ Blue in
+That is the adversarial dynamic in VERITAS: not Red vs.\ Blue in
 training, but Optimist vs.\ Cynic in investigation. The Triage Agent
 proposes. The Forensic Auditor demands proof.
 
 \section{What It Does}
 
-ADVERSA investigates any mounted Windows forensic image through a
+VERITAS investigates any mounted Windows forensic image through a
 three-phase pipeline, fully autonomous from invocation to HTML report.
 
 \textbf{Phase 1 — Deterministic triage.} A Triage Agent dispatches
@@ -200,7 +200,7 @@ not from these images.
 
 Physical artifact verification is not a feature. It is the only thing
 that separates a forensic finding from a model opinion. Every
-architecture decision in ADVERSA follows from that single principle.
+architecture decision in VERITAS follows from that single principle.
 
 Architectural guardrails beat prompt controls. The four-layer MCP
 boundary means no version of the model can write to evidence directories,
@@ -215,7 +215,7 @@ not in the original design. Adding a second agent whose only job is to
 disprove the first agent's findings turned a triage tool into an
 investigation system.
 
-\section{What's Next for ADVERSA}
+\section{What's Next for VERITAS}
 
 The detection rule foundation needs pool-separation: a signal should only
 be admitted if it appears in documented attack telemetry and \emph{never}

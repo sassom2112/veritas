@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 """
-compute_weights.py — Compute calibrated signal weights for ADVERSA's scoring engine.
+compute_weights.py — Compute calibrated signal weights for VERITAS's scoring engine.
 
 Reads the corpus built by build_corpus.py and produces calibrated_weights.json,
 which blue_agent.py loads automatically at startup.
@@ -267,7 +267,7 @@ def compute_signal_weights(
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Compute calibrated signal weights from ADVERSA corpus'
+        description='Compute calibrated signal weights from VERITAS corpus'
     )
     parser.add_argument('--min-samples', type=int, default=3,
                         help='Min corpus samples needed to use frequency stats (default: 3)')
@@ -276,7 +276,7 @@ def main():
     args = parser.parse_args()
 
     print(f"\n{'═'*60}")
-    print(f"  ADVERSA Weight Calibration")
+    print(f"  VERITAS Weight Calibration")
     print(f"  min_samples={args.min_samples}  verbose={args.verbose}")
     print(f"{'═'*60}\n")
     print("Loading corpus...")

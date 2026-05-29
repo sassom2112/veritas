@@ -1,27 +1,29 @@
 ---
 title: Try It Out
-nav_order: 2
+nav_order: 3
 permalink: /submission
 ---
 
 # Try It Out
 
-ADVERSA runs on a SANS SIFT workstation against mounted Windows disk images. There is no hosted demo — the tool calls real forensic binaries (`vol.py`, `fls`, `rip.pl`, `grep`) directly against evidence files. That's the point.
+VERITAS runs on a SANS SIFT workstation against mounted Windows disk images. There is no hosted demo — the tool calls real forensic binaries (`vol.py`, `fls`, `rip.pl`, `grep`) directly against evidence files. That's the point.
 
 ---
 
 ## Live Investigation Reports
 
-Two fully validated pipeline runs. Every Auditor challenge, tool call, and verdict is interactive and browsable.
+Four fully validated pipeline runs. Every Auditor challenge, tool call, and verdict is interactive and browsable.
 
 [View nfury Investigation Report](/nfury){: .btn .btn-primary .mb-4 }
 [View tdungan Investigation Report](/tdungan){: .btn .mb-4 }
 [View nromanoff Investigation Report](/nromanoff){: .btn .mb-4 }
+[View rocba Investigation Report](/rocba){: .btn .mb-4 }
 
 **nfury:** 19 detected · 15 confirmed · 4 refuted · 16 min · $14  
 **tdungan (campaign mode):** 17 detected · 13 confirmed · 4 refuted · 15 min · $14  
 **nromanoff:** 7 detected · 3 confirmed · 4 refuted · 15 min · $14  
-**Total: 31 confirmed across 43 detected, 12 correctly refuted**
+**rocba (attacker C2 node):** 5 detected · 1 confirmed · 4 refuted · 23 min · ~$14  
+**Total: 32 confirmed across 48 detected · 16 correctly refuted · exactly 4 refutals per host**
 
 ---
 
@@ -45,7 +47,7 @@ Requires a Windows disk image mounted read-only at a path like `/mnt/hostname`.
 python3 fast-triage/fast_triage.py /mnt/hostname
 ```
 
-Deterministic IOC sweep using corpus-calibrated signal weights. Prints score and matched signals. Auto-escalates to full pipeline if score ≥ 30.
+Runs ~25 SIFT commands deterministically. Flags artifact candidates against a corpus-calibrated starting-point signal library. Auto-escalates to the full adversarial pipeline if warranted. No API key required — use this to decide whether an image is worth the full $14 investigation.
 
 ---
 

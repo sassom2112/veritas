@@ -605,7 +605,7 @@ Never list a technique without citing the raw evidence that supports it. No spec
                 while not stop_early:
                     try:
                         response = client.messages.create(
-                            model=os.environ.get('ADVERSA_MODEL', 'claude-sonnet-4-6'),
+                            model=os.environ.get('VERITAS_MODEL', 'claude-sonnet-4-6'),
                             max_tokens=4096,
                             system=_AGENT_SYSTEM,
                             messages=messages,
@@ -695,7 +695,7 @@ Never list a technique without citing the raw evidence that supports it. No spec
                             messages.append({'role': 'user', 'content': prompt})
                             try:
                                 final_resp = client.messages.create(
-                                    model=os.environ.get('ADVERSA_MODEL', 'claude-sonnet-4-6'),
+                                    model=os.environ.get('VERITAS_MODEL', 'claude-sonnet-4-6'),
                                     max_tokens=2048,
                                     system=_AGENT_SYSTEM,
                                     messages=messages,

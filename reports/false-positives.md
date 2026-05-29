@@ -1,3 +1,7 @@
+---
+nav_exclude: true
+---
+
 # False Positive & Failure Mode Log
 
 ## FP-001: Scoring Engine Self-Match

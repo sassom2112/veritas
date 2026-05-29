@@ -1,4 +1,8 @@
-# Domain Gap — ADVERSA Signal Calibration
+---
+nav_exclude: true
+---
+
+# Domain Gap — VERITAS Signal Calibration
 
 ## The Problem
 

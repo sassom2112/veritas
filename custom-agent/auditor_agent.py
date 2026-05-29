@@ -463,7 +463,7 @@ class ForensicAuditor:
 
         while True:
             response = self.client.messages.create(
-                model=os.environ.get('ADVERSA_MODEL', 'claude-sonnet-4-6'),
+                model=os.environ.get('VERITAS_MODEL', 'claude-sonnet-4-6'),
                 max_tokens=1024,
                 system=_CYNIC_SYSTEM,
                 messages=messages,

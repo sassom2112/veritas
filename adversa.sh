@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# adversa.sh — ADVERSA Investigation Framework
+# adversa.sh — VERITAS Investigation Framework
 #
 # Usage:
 #   ./adversa.sh /mnt/nfury
@@ -20,7 +20,7 @@ C='\033[0;36m'; B='\033[0;34m'; D='\033[2m'; N='\033[0m'
 # ── Banner ────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${B}  ╔══════════════════════════════════════════════════╗${N}"
-echo -e "${B}  ║${N}   ADVERSA — Adversarial Signal Learning          ${B}║${N}"
+echo -e "${B}  ║${N}   VERITAS — Adversarial Signal Learning          ${B}║${N}"
 echo -e "${B}  ║${N}   Forensic Triage + Auditor Pipeline             ${B}║${N}"
 echo -e "${B}  ╚══════════════════════════════════════════════════╝${N}"
 echo ""

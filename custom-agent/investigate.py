@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 _HERE    = os.path.dirname(os.path.abspath(__file__))
 _REPORTS = os.path.normpath(os.path.join(_HERE, '..', 'reports'))
 
-# ADVERSA case_io — writes auditor findings as DRAFT for human approval
+# VERITAS case_io — writes auditor findings as DRAFT for human approval
 sys.path.insert(0, os.path.normpath(os.path.join(_HERE, '..', 'src')))
 try:
     from adversa.case_io import init_case, write_findings_from_audit, get_examiner
@@ -56,14 +56,14 @@ _HIGH_VALUE_TECHNIQUES = {'T1003.001', 'T1071.001', 'T1569.002', 'T1547.001'}
 # ── Verdict helper ─────────────────────────────────────────────────────────
 
 def _final_verdict(score: int, confirmed: list = None) -> str:
-    if confirmed and any(t in _HIGH_VALUE_TECHNIQUES for t in confirmed):
+    confirmed = confirmed or []
+    if any(t in _HIGH_VALUE_TECHNIQUES for t in confirmed):
         return 'HIGH — Active compromise confirmed (high-value technique verified on disk)'
-    if score >= 70:
+    if len(confirmed) >= 3:
         return 'HIGH — Active compromise confirmed'
-    elif score >= 40:
+    if len(confirmed) >= 1:
         return 'MEDIUM — Suspicious activity, manual review required'
-    else:
-        return 'LOW — No confirmed compromise indicators'
+    return 'LOW — No confirmed compromise indicators'
 
 
 # ── IOC auto-detection ─────────────────────────────────────────────────────
@@ -120,8 +120,8 @@ async def run_investigation(target_path: str, no_synthesis: bool = False,
     started = datetime.now(timezone.utc)
 
     print(f"\n{'═'*60}")
-    print(f"  ADVERSARIAL INVESTIGATION ORCHESTRATOR")
-    print(f"  Framework:  ADVERSA (Adversarial Signal Learning)")
+    print(f"  VERITASRIAL INVESTIGATION ORCHESTRATOR")
+    print(f"  Framework:  VERITAS (Adversarial Signal Learning)")
     print(f"  Target:     {target_path}")
     if memory_path:
         print(f"  Memory:     {memory_path}")
@@ -207,7 +207,7 @@ async def run_investigation(target_path: str, no_synthesis: bool = False,
             'generated':     datetime.now(timezone.utc).isoformat(),
             'target':        target_path,
             'memory_path':   memory_path,
-            'framework':     'ADVERSA — Adversarial Signal Learning',
+            'framework':     'VERITAS — Adversarial Signal Learning',
             'pipeline':      'Disk+Memory Triage -> Forensic Auditor',
             'triage': {
                 'disk_score':        triage_score,
@@ -256,7 +256,7 @@ async def run_investigation(target_path: str, no_synthesis: bool = False,
         'generated':   datetime.now(timezone.utc).isoformat(),
         'target':      target_path,
         'memory_path': memory_path,
-        'framework':   'ADVERSA — Adversarial Signal Learning',
+        'framework':   'VERITAS — Adversarial Signal Learning',
         'pipeline':    'Disk+Memory Triage -> Forensic Auditor',
         'elapsed_s':   round(elapsed, 1),
         'triage': {
@@ -410,7 +410,7 @@ def _save_unified(host: str, report: dict) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='ADVERSA Investigation Orchestrator — '
+        description='VERITAS Investigation Orchestrator — '
                     'Disk + Memory Triage -> Forensic Auditor -> Unified Report',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
@@ -448,12 +448,12 @@ Examples:
     parser.add_argument('--no-synthesis', action='store_true',
                         help='Alias for --triage.')
     parser.add_argument('--model', metavar='MODEL_ID',
-                        default=os.environ.get('ADVERSA_MODEL', 'claude-sonnet-4-6'),
+                        default=os.environ.get('VERITAS_MODEL', 'claude-sonnet-4-6'),
                         help='Claude model for agentic loops '
                              '(default: claude-sonnet-4-6). '
                              'Use claude-opus-4-7 for maximum capability.')
     args = parser.parse_args()
-    os.environ['ADVERSA_MODEL'] = args.model
+    os.environ['VERITAS_MODEL'] = args.model
     print(f"  Model: {args.model}")
 
     # Resolve no-synthesis alias
