@@ -628,7 +628,7 @@ def generate_report(host: str, reports_dir: str) -> str:
   {pass2_log_section}
 
   <footer class="report-footer">
-    <span>VERITAS — Adversarial Signal Learning Framework</span>
+    <span>VERITAS — Forensic Investigation Report</span>
     <span>Generated: {_esc(ts)}</span>
   </footer>
 

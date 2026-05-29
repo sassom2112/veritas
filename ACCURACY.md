@@ -26,9 +26,11 @@ forensic tool call.** The numbers below are evidence for that claim.
 tool call in the append-only audit log. Every confirmed technique can be independently
 reproduced with one shell command on the same mounted image.
 
-**Exactly 4 refutals per host** across all four investigations — three victim machines and
-a C2 relay node, two different tool families. The Auditor applies the same verification
-standard regardless of host type.
+The refuted count is 4 per host. The refuted *techniques* are not identical across hosts —
+T1569.002 (PsExec) is **confirmed** on nfury (binary found on disk) and **refuted** on
+tdungan (memory signal, no binary present). The Auditor makes case-specific decisions.
+The consistent pattern is the class of signal — memory-resident technique indicators
+without disk corroboration — not a fixed output count.
 
 ---
 

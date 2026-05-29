@@ -65,21 +65,32 @@ Evidence modification is structurally impossible — not prompt-dependent.
 
 ## The Scoreboard
 
-Four hosts. Same Auditor. Same rules. Same result every time.
+Four hosts. Same Auditor. Same rules.
 
 | Host | Role | Investigated | Confirmed | Refuted |
 |------|------|-------------|-----------|---------|
-| nfury (10.3.58.6) | Victim | 19 | **15** | **4** |
-| tdungan (10.3.58.7) | Victim (campaign) | 17 | **13** | **4** |
-| nromanoff (10.3.58.5) | Victim | 7 | **3** | **4** |
-| rocba (192.168.1.5) | C2 relay node | 5 | **1** | **4** |
+| nfury (10.3.58.6) | Victim | 19 | **15** | 4 |
+| tdungan (10.3.58.7) | Victim (campaign) | 17 | **13** | 4 |
+| nromanoff (10.3.58.5) | Victim | 7 | **3** | 4 |
+| rocba (192.168.1.5) | C2 relay node | 5 | **1** | 4 |
 | **Total** | | **48** | **32** | **16** |
 
-Exactly four refutals. Every host. Three victim machines and the attacker's own relay node. Two different tool families (httppump, spinlock.exe). Different compromise depths. Same Auditor behavior.
+The refuted count happens to be 4 on each host. The refuted *techniques* are not the same.
 
-**The four refutals are the proof the game works.**
+| Host | Refuted techniques |
+|------|--------------------|
+| nfury | T1071.001, T1134, T1547.001, T1574 |
+| tdungan | T1134, T1547.001, **T1569.002**, T1574 |
+| nromanoff | memory-only signals, no disk corroboration |
+| rocba | T1071.001, T1134, T1547.001, T1574 |
 
-On nfury, T1071.001 — active C2 web protocol — was flagged in memory. The signal: the string `established` in netscan output. TCP connection state strings appear in memory regardless of active malicious connections. The Auditor ran `windows.netscan` and checked all 432 connection records. Every ESTABLISHED and CLOSE_WAIT connection resolved to Apple, Microsoft, or Google CDN infrastructure. Returned REFUTED.
+Notice T1569.002 — PsExec lateral movement. On nfury, the Auditor found `psexesvc.exe` on disk and returned **CONFIRMED**. On tdungan, the Auditor checked and found no binary — returned **REFUTED**. Same technique. Two different hosts. Two different verdicts. The Auditor is making case-specific decisions based on what's actually on each disk, not running a fixed pattern.
+
+The consistent pattern isn't the number — it's the class of signal. Memory analysis against Windows 7 images tends to surface the same noise techniques (access token manipulation, hijack execution flow, run key persistence, active C2 connections) because these patterns appear in any live Windows memory image. The Auditor correctly dismisses them every time they lack disk corroboration.
+
+**The refutals are the proof the game works.**
+
+On nfury, T1071.001 was flagged because the string `established` appeared in `windows.netscan` output. TCP state strings appear in memory regardless of whether any malicious connection is active. The Auditor ran `windows.netscan` and checked all 432 connection records. Every ESTABLISHED and CLOSE\_WAIT connection resolved to Apple, Microsoft, or Google CDN infrastructure. Returned REFUTED.
 
 That is not the Cynic being careful. That is the Cynic running out of connections to check because the actual network data didn't support the claim.
 

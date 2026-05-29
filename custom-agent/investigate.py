@@ -120,8 +120,8 @@ async def run_investigation(target_path: str, no_synthesis: bool = False,
     started = datetime.now(timezone.utc)
 
     print(f"\n{'═'*60}")
-    print(f"  VERITASRIAL INVESTIGATION ORCHESTRATOR")
-    print(f"  Framework:  VERITAS (Adversarial Signal Learning)")
+    print(f"  VERITAS INVESTIGATION ORCHESTRATOR")
+    print(f"  Framework:  VERITAS")
     print(f"  Target:     {target_path}")
     if memory_path:
         print(f"  Memory:     {memory_path}")
@@ -207,7 +207,7 @@ async def run_investigation(target_path: str, no_synthesis: bool = False,
             'generated':     datetime.now(timezone.utc).isoformat(),
             'target':        target_path,
             'memory_path':   memory_path,
-            'framework':     'VERITAS — Adversarial Signal Learning',
+            'framework':     'VERITAS',
             'pipeline':      'Disk+Memory Triage -> Forensic Auditor',
             'triage': {
                 'disk_score':        triage_score,
@@ -256,7 +256,7 @@ async def run_investigation(target_path: str, no_synthesis: bool = False,
         'generated':   datetime.now(timezone.utc).isoformat(),
         'target':      target_path,
         'memory_path': memory_path,
-        'framework':   'VERITAS — Adversarial Signal Learning',
+        'framework':   'VERITAS',
         'pipeline':    'Disk+Memory Triage -> Forensic Auditor',
         'elapsed_s':   round(elapsed, 1),
         'triage': {
