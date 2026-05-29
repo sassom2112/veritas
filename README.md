@@ -1,8 +1,10 @@
 # VERITAS — Autonomous Windows Forensic Investigation
 
-A three-phase pipeline for dead-disk and memory forensics on Windows images.
-Deterministic triage → agentic investigation → adversarial audit.
-**Every confirmed finding is backed by a physical artifact on disk — not model confidence.**
+VERITAS solves the AI forensic investigator trust problem — not by finding a better model, but by making hallucinated findings structurally unable to reach the final report.
+
+**Two agents. The Optimist investigates. The Cynic** receives only the findings list and must confirm each claim from physical bytes on disk before it enters the report. Model confidence produces neither CONFIRMED nor REFUTED.
+
+Three hosts, real SANS case data: **32 confirmed, 16 correctly refuted.** The 4-refutal pattern holds across every host including the attacker's own C2 node — an operator who deliberately left nothing on disk. The Auditor found one thing and dismissed four. Same standard, every host.
 
 Built for the **SANS FIND EVIL! Hackathon 2026** · Custom MCP Server + Multi-Agent Adversarial Pipeline
 
@@ -21,6 +23,14 @@ the same conclusion and kept the human in the loop.
 forensic integrity.** A finding is only CONFIRMED when a second independent agent — one that
 receives the findings list and nothing else — calls a real forensic tool and reads physical bytes
 off disk. Model confidence produces neither CONFIRMED nor REFUTED.
+
+---
+
+## Why Two Agents
+
+This is the same architectural pattern as constraint projection in adversarial ML — you don't fix the problem by optimizing the thing that produces bad outputs, you build the layer that forces outputs back into valid space before they count. The Auditor is that layer. It doesn't care how confident the Triage Agent was. It only cares what the filesystem says.
+
+The Optimist and the Cynic are structurally decoupled: the Auditor receives the findings list and nothing else. No investigation context, no Phase 1 scores, no technique labels. If it can't re-derive the finding from physical bytes in an isolated MCP session, the finding doesn't ship. Wide triage + adversarial verification is the correct two-stage architecture — not triage alone, not verification alone.
 
 ---
 
