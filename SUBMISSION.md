@@ -41,17 +41,7 @@ Requires a Windows disk image mounted read-only at a path like `/mnt/hostname`.
 
 ---
 
-## Path A — Fast triage, no API key (< 10 seconds)
-
-```bash
-python3 fast-triage/fast_triage.py /mnt/hostname
-```
-
-Runs ~25 SIFT commands deterministically. Flags artifact candidates against a corpus-calibrated starting-point signal library. Auto-escalates to the full adversarial pipeline if warranted. No API key required — use this to decide whether an image is worth the full $14 investigation.
-
----
-
-## Path B — Full adversarial pipeline
+## Full adversarial pipeline
 
 ```bash
 # Terminal 1
@@ -75,7 +65,7 @@ Host names resolve to `reports/<host>-iocs.json`. Explicit declaration required 
 
 ---
 
-## Path C — Rebuild signal weights
+## Rebuild signal weights
 
 ```bash
 # Recalibrate corpus weights from MalwareBazaar + HybridAnalysis
