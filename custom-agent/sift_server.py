@@ -10,6 +10,15 @@ Security model:
   - /dev/null whitelisted as redirection target (output discard, not evidence)
   - Hard-blocked strings: destructive, exfil, privilege-escalation, injection
   - Atomic JSONL audit log (chain of custody)
+
+Layer isolation (cross-layer verification):
+  Set VERITAS_LAYER=disk   → only Sleuth Kit / SIFT disk tools available
+  Set VERITAS_LAYER=memory → only Volatility / memory tools available
+  Unset (default)          → full allowlist (backward compatible)
+
+  Structural enforcement: the disk agent's MCP session literally cannot call vol.py.
+  The memory agent's session cannot call fls. Not a prompt restriction — the server
+  rejects the binary before any subprocess is spawned.
 """
 
 import json
@@ -23,7 +32,11 @@ from mcp.server.fastmcp import FastMCP
 
 logging.getLogger('mcp').setLevel(logging.WARNING)
 
-mcp = FastMCP("SIFT Forensic Server")
+# Layer isolation — set by the spawning agent via env var on StdioServerParameters
+_LAYER = os.environ.get('VERITAS_LAYER', 'all')  # 'disk' | 'memory' | 'all'
+
+_layer_label = f" [{_LAYER.upper()} layer]" if _LAYER != 'all' else ''
+mcp = FastMCP(f"SIFT Forensic Server{_layer_label}")
 
 _REPORTS = os.path.realpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'reports')
@@ -77,6 +90,58 @@ _ALLOWED_BINARIES = frozenset({
     # ── Hayabusa — 3700+ Sigma rules against Windows event logs ──
     'hayabusa',
 })
+
+# ── Layer-specific subsets ───────────────────────────────────────────────────
+# When VERITAS_LAYER is set, the server enforces the subset at the binary level.
+# An agent spawned with VERITAS_LAYER=memory cannot call fls — the server rejects it
+# before any subprocess is spawned. Not a prompt restriction.
+
+_DISK_BINARIES = frozenset({
+    # Sleuth Kit
+    'fls', 'icat', 'ils', 'mmls', 'fsstat', 'blkls', 'mactime',
+    'tsk_recover', 'img_stat', 'srch_strings', 'tsk_comparedir', 'sigfind',
+    # Registry
+    'rip.pl', 'regripper',
+    # Artifact tools
+    'yara', 'bulk_extractor', 'foremost', 'photorec', 'hayabusa',
+    'log2timeline.py', 'psort.py', 'pinfo.py',
+    'dotnet',
+    # Binary inspection (on disk files)
+    'strings', 'xxd', 'hexdump', 'od', 'readelf', 'objdump',
+    'file', 'exiftool', 'pdftotext', 'pdfinfo',
+    # Hashing
+    'md5sum', 'sha1sum', 'sha256sum', 'ssdeep',
+    # Text processing
+    'grep', 'find', 'cat', 'head', 'tail', 'sort', 'uniq', 'wc',
+    'awk', 'cut', 'tr', 'paste', 'split', 'comm', 'diff', 'join',
+    # Utilities
+    'stat', 'ls', 'echo', 'printf', 'date', 'basename', 'dirname',
+    'iconv', 'base64', 'jq', 'xargs', 'tee', 'ewfmount', 'ewfinfo', 'ewfverify',
+})
+
+_MEMORY_BINARIES = frozenset({
+    # Volatility 3
+    'vol.py', 'vol',
+    # Python (needed to invoke vol.py)
+    'python3', 'python',
+    # Analysis on memory output
+    'strings', 'yara',
+    # Text processing
+    'grep', 'find', 'cat', 'head', 'tail', 'sort', 'uniq', 'wc',
+    'awk', 'cut', 'tr', 'jq',
+    # Utilities
+    'stat', 'ls', 'echo', 'printf', 'md5sum', 'sha256sum',
+})
+
+
+def _effective_allowlist() -> frozenset:
+    """Return the binary allowlist for the current layer."""
+    if _LAYER == 'disk':
+        return _DISK_BINARIES
+    if _LAYER == 'memory':
+        return _MEMORY_BINARIES
+    return _ALLOWED_BINARIES
+
 
 # ── Hard-blocked strings ─────────────────────────────────────────────────────
 _HARD_BLOCKED = (
@@ -188,9 +253,11 @@ def _validate_command(command: str):
         if not tokens:
             continue
 
+        allowlist = _effective_allowlist()
         binary = os.path.basename(tokens[0]).lower()
-        if binary not in _ALLOWED_BINARIES:
-            return False, f"binary {binary!r} not in forensic allowlist"
+        if binary not in allowlist:
+            layer_msg = f" (layer={_LAYER})" if _LAYER != 'all' else ''
+            return False, f"binary {binary!r} not in forensic allowlist{layer_msg}"
 
         # ── python3 / python: block inline execution ──────────────────────
         if binary in ('python3', 'python') and len(tokens) > 1:
@@ -202,7 +269,7 @@ def _validate_command(command: str):
             for i, tok in enumerate(tokens):
                 if tok in ('-exec', '-execdir') and i + 1 < len(tokens):
                     exec_bin = os.path.basename(tokens[i + 1]).lower()
-                    if exec_bin not in _ALLOWED_BINARIES:
+                    if exec_bin not in allowlist:
                         return False, (
                             f"find {tok} binary {exec_bin!r} "
                             f"not in forensic allowlist"
@@ -221,7 +288,7 @@ def _validate_command(command: str):
                     continue
                 # First non-flag token is the command xargs will run
                 xargs_bin = os.path.basename(tok).lower()
-                if xargs_bin not in _ALLOWED_BINARIES:
+                if xargs_bin not in allowlist:
                     return False, (
                         f"xargs command {xargs_bin!r} "
                         f"not in forensic allowlist"

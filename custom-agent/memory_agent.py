@@ -456,6 +456,186 @@ async def investigate(memory_path: str, host: str,
     return final_score, final_hits
 
 
+# ── Cross-layer investigation entry point ─────────────────────────────────────
+# Used by investigate.py on the future/cross-layer-verification branch.
+# Returns LayerClaim list for cross_verifier.py, not the (score, hits) tuple.
+
+_LAYERED_SYSTEM = """\
+You are the Memory Investigation Agent. You have access to Volatility 3 only.
+Your job: investigate this memory image and identify attacker activity.
+
+Focus on:
+- Process injection (windows.malfind — PAGE_EXECUTE_READWRITE regions)
+- Suspicious processes (windows.psscan — hidden/unlinked)
+- Network connections (windows.netscan — ESTABLISHED connections)
+- Credential access (windows.hashdump, windows.lsadump)
+- Command history (windows.cmdline — unusual arguments)
+
+After your investigation, output a JSON array of confirmed findings.
+"""
+
+_LAYERED_SYNTHESIS = """\
+Investigation complete. Output a JSON array of your CONFIRMED findings.
+
+Each entry must follow this exact structure:
+{
+  "technique_id": "T1055",
+  "technique_name": "Process Injection",
+  "tool_name": "vol windows.malfind",
+  "tool_output": "EXACT output line — e.g. the VAD record that proves injection",
+  "artifact_hint": "MsMpEng.exe PID 1234 PAGE_EXECUTE_READWRITE at 0x1f081330000"
+}
+
+Rules:
+- Only include techniques where vol.py returned direct evidence.
+- tool_output must be the ACTUAL TEXT from a vol.py call, not a paraphrase.
+- If no techniques confirmed, output: []
+
+Respond with ONLY the JSON array. No prose, no markdown fences.
+"""
+
+
+async def investigate_layered(
+    memory_path: str,
+    host: str,
+) -> 'list':  # list[LayerClaim] — import deferred to avoid circular
+    """
+    Memory investigation producing LayerClaim list for cross-layer verification.
+    Uses VERITAS_LAYER=memory server — disk tools are structurally unavailable.
+    """
+    import re
+    from contracts import LayerClaim
+
+    client = anthropic.Anthropic()
+    server_params = StdioServerParameters(
+        command='python3',
+        args=[os.path.join(_HERE, 'sift_server.py')],
+        env={**os.environ, 'VERITAS_LAYER': 'memory'},
+    )
+
+    MAX_CALLS = 20
+    print(f"\n{'─'*60}")
+    print(f"  MEMORY AGENT  —  {memory_path}")
+    print(f"  Tools: memory-only (Volatility 3)")
+    print(f"  Budget: {MAX_CALLS} tool calls")
+    print(f"{'─'*60}")
+
+    all_tool_outputs: list[dict] = []
+
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            mcp_tools = await session.list_tools()
+            tools = [
+                {'name': t.name, 'description': t.description,
+                 'input_schema': t.inputSchema}
+                for t in mcp_tools.tools
+            ]
+
+            messages = [{
+                'role': 'user',
+                'content': (
+                    f"Memory image: {memory_path}\n"
+                    f"Host: {host}\n"
+                    f"Investigate this memory image for attacker activity. "
+                    f"Use vol.py plugins systematically. "
+                    f"Budget: {MAX_CALLS} tool calls."
+                ),
+            }]
+
+            tool_count = 0
+            while tool_count < MAX_CALLS:
+                response = client.messages.create(
+                    model=os.environ.get('VERITAS_MODEL', 'claude-sonnet-4-6'),
+                    max_tokens=2048,
+                    system=_LAYERED_SYSTEM,
+                    tools=tools,
+                    messages=messages,
+                )
+                messages.append({'role': 'assistant', 'content': response.content})
+
+                tool_blocks = [b for b in response.content if b.type == 'tool_use']
+                if not tool_blocks:
+                    break
+
+                results_block = []
+                for block in tool_blocks:
+                    if tool_count >= MAX_CALLS:
+                        results_block.append({
+                            'type': 'tool_result',
+                            'tool_use_id': block.id,
+                            'content': '[BUDGET EXHAUSTED]',
+                        })
+                        continue
+                    try:
+                        r = await session.call_tool(block.name, block.input)
+                        out = r.content[0].text
+                    except Exception as exc:
+                        out = f'[Tool error: {exc}]'
+                    cmd = block.input.get('command', block.name)
+                    all_tool_outputs.append({'cmd': cmd, 'output': out})
+                    tool_count += 1
+                    print(f"  [mem] [{tool_count:02d}] {cmd[:70]}")
+                    results_block.append({
+                        'type': 'tool_result',
+                        'tool_use_id': block.id,
+                        'content': out[:3000],
+                    })
+                messages.append({'role': 'user', 'content': results_block})
+
+            # Structured synthesis
+            messages.append({'role': 'user', 'content': _LAYERED_SYNTHESIS})
+            synthesis = client.messages.create(
+                model=os.environ.get('VERITAS_MODEL', 'claude-sonnet-4-6'),
+                max_tokens=2048,
+                system=_LAYERED_SYSTEM,
+                messages=messages,
+                tools=[],
+            )
+            raw_text = synthesis.content[0].text if synthesis.content else '[]'
+
+    # Parse LayerClaims
+    raw_text = re.sub(r'```(?:json)?\s*', '', raw_text).strip()
+    try:
+        raw = json.loads(raw_text)
+    except json.JSONDecodeError:
+        m = re.search(r'\[.*\]', raw_text, re.DOTALL)
+        raw = json.loads(m.group(0)) if m else []
+
+    claims: list[LayerClaim] = []
+    for entry in raw:
+        if not isinstance(entry, dict) or not entry.get('technique_id'):
+            continue
+        claims.append(LayerClaim(
+            technique_id=entry['technique_id'].strip(),
+            technique_name=entry.get('technique_name', entry['technique_id']),
+            source_layer='memory',
+            tool_name=entry.get('tool_name', 'vol'),
+            tool_output=entry.get('tool_output', '')[:2000],
+            artifact_hint=entry.get('artifact_hint', '')[:200],
+        ))
+
+    # Write audit log
+    audit_entry = {
+        'agent': 'memory_agent_layered',
+        'host': host,
+        'generated': datetime.now(timezone.utc).isoformat(),
+        'memory_path': memory_path,
+        'tool_calls': all_tool_outputs,
+        'claims': list(claims),
+    }
+    audit_path = os.path.join(_REPORTS, f'{host}-memory-agent-log.json')
+    os.makedirs(_REPORTS, exist_ok=True)
+    with open(audit_path, 'w') as f:
+        json.dump(audit_entry, f, indent=2)
+
+    print(f"\n  Memory agent: {len(claims)} claim(s) from {tool_count} tool calls")
+    for c in claims:
+        print(f"    {c['technique_id']}  {c['artifact_hint'][:60]}")
+
+    return claims
+
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(
