@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-auditor_agent.py -- The Forensic Auditor (The Cynic)
+auditor_agent.py -- The Forensic Auditor
 
 Challenges every Triage Agent finding with bounded MCP tool calls.
 Produces a timestamped argumentation transcript used as the primary
@@ -9,8 +9,9 @@ submission artifact.
 Convergence rules:
   - MAX_CHALLENGES_PER_FINDING: max challenge rounds per technique
   - MAX_TOOLS_PER_CHALLENGE:    max MCP tool calls per round
-  - CONFIRMED: Auditor exhausts challenge budget without finding contradiction
+  - CONFIRMED: positive tool return value required — model confidence is not enough
   - REFUTED:   Auditor finds positive evidence contradicting the finding
+  - INCONCLUSIVE: evidence cannot be located from available tools
 
 Usage (standalone):
     python3 custom-agent/auditor_agent.py --triage reports/nromanoff-custom-agent-report.json
@@ -29,6 +30,7 @@ import sys
 from datetime import datetime, timezone
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from contracts import AuditResult, TriageHandoff
 
 logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('mcp').setLevel(logging.WARNING)
@@ -39,12 +41,11 @@ _REPORTS = os.path.normpath(os.path.join(_HERE, '..', 'reports'))
 MAX_CHALLENGES_PER_FINDING = 5   # raised from 3 — prevents budget_exhausted on T1055/T1134/T1547
 MAX_TOOLS_PER_CHALLENGE    = 3   # raised from 2 — allows richer per-round verification
 
-_CYNIC_SYSTEM = """\
-You are The Forensic Auditor (The Cynic) — a second-opinion agent in a
-digital forensics investigation. The Triage Agent has flagged ATT&CK
-techniques. Your job is to independently verify each finding using raw
-SIFT forensic tool output — not the typed tool summaries the Triage Agent
-already produced.
+_AUDITOR_SYSTEM = """\
+You are The Forensic Auditor — a second-opinion agent in a digital
+forensics investigation. The Triage Agent has flagged ATT&CK techniques.
+Your job is to independently verify each finding using raw SIFT forensic
+tool output — not the typed tool summaries the Triage Agent already produced.
 
 Rules:
 1. String-match alone is not proof. Find the definitive physical artifact.
@@ -122,7 +123,9 @@ _TECHNIQUE_NAMES = {
 
 class ForensicAuditor:
     """
-    The Cynic: challenges Triage findings, produces argumentation transcript.
+    Forensic Auditor: independently challenges Triage findings, produces argumentation transcript.
+    Receives technique IDs only — no triage reasoning, no confidence scores.
+    CONFIRMED requires a positive tool return value.
     """
 
     def __init__(self):
@@ -130,17 +133,14 @@ class ForensicAuditor:
 
     # ── Public entry point ─────────────────────────────────────────────────
 
-    async def audit(self, target_path: str, triage_report: dict,
-                    memory_path: str = None) -> tuple:
+    async def audit(self, target_path: str, triage_report: TriageHandoff,
+                    memory_path: str = None) -> AuditResult:
         """
         Audit all Triage findings in parallel — each technique gets its own
         MCP session so challenges run concurrently.
 
-        Returns:
-            confirmed (list[str])   — technique IDs that survived challenge
-            refuted   (list[str])   — technique IDs disproved or weakened
-            transcript (list[dict]) — full argumentation log (input order)
-            adjusted_score (int)    — sum of confirmed technique weights
+        Returns AuditResult with confirmed/inconclusive/refuted/transcript/adjusted_score.
+        CONFIRMED requires a positive tool return value — not budget exhaustion.
         """
         host              = os.path.basename(target_path.rstrip('/'))
         triage_score      = triage_report.get('confidence_score', 0)
@@ -222,7 +222,13 @@ class ForensicAuditor:
         print(f"  Transcript  ->   {out_path}")
         print(f"{'═'*60}\n")
 
-        return confirmed, inconclusive, refuted, transcript, adjusted_score
+        return AuditResult(
+            confirmed=confirmed,
+            inconclusive=inconclusive,
+            refuted=refuted,
+            transcript=transcript,
+            adjusted_score=adjusted_score,
+        )
 
     # ── Helpers ────────────────────────────────────────────────────────────
 
@@ -465,7 +471,7 @@ class ForensicAuditor:
             response = self.client.messages.create(
                 model=os.environ.get('VERITAS_MODEL', 'claude-sonnet-4-6'),
                 max_tokens=1024,
-                system=_CYNIC_SYSTEM,
+                system=_AUDITOR_SYSTEM,
                 messages=messages,
                 tools=tools,
             )

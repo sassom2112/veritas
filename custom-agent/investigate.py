@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
-investigate.py -- Adversarial Investigation Orchestrator
+investigate.py -- VERITAS Investigation Orchestrator
 
-Sequences: Triage Agent (The Optimist) -> Forensic Auditor (The Cynic)
-Produces a unified report and argumentation transcript.
+Sequences: Triage Agent -> Forensic Auditor -> Unified Report
+Both phases always run. The Auditor is not optional.
 
 Usage — case directory (auto-discovers disk mount + memory):
     python3 custom-agent/investigate.py --case /cases/nfury
-    python3 custom-agent/investigate.py --case /cases/nfury --triage
 
 Campaign mode — explicitly name other hosts in the same investigation:
     python3 custom-agent/investigate.py --case /cases/tdungan nfury
@@ -19,7 +18,6 @@ unless you name them here — no automatic cross-campaign contamination.
 Usage — explicit paths (disk must already be mounted):
     python3 custom-agent/investigate.py /mnt/nfury
     python3 custom-agent/investigate.py /mnt/nfury --memory /cases/nfury/mem.001
-    python3 custom-agent/investigate.py /mnt/nfury --no-synthesis
 """
 
 import argparse
@@ -46,6 +44,7 @@ sys.path.insert(0, _HERE)
 import blue_agent
 import memory_agent
 from auditor_agent import ForensicAuditor
+from contracts import AuditResult, TriageHandoff
 from extract_iocs import extract_iocs, merge_iocs
 from html_report import generate_report
 
@@ -109,12 +108,13 @@ def _resolve_campaign_iocs(hosts_or_paths: list, reports_dir: str) -> dict | Non
 
 # ── Main orchestration loop ────────────────────────────────────────────────
 
-async def run_investigation(target_path: str, no_synthesis: bool = False,
+async def run_investigation(target_path: str,
                             ioc_data: dict = None,
                             memory_path: str = None) -> dict:
     """
     Full Triage -> Audit pipeline. Returns unified report dict.
     When memory_path is provided, disk and memory triage run in parallel.
+    Both phases always run — the Auditor is not optional.
     """
     host = os.path.basename(target_path.rstrip('/'))
     started = datetime.now(timezone.utc)
@@ -136,19 +136,15 @@ async def run_investigation(target_path: str, no_synthesis: bool = False,
         print(f"  PHASE 1  —  DISK + MEMORY TRIAGE  (parallel)")
         print(f"{'━'*60}")
         (triage_score, triage_hits), (mem_score, mem_hits) = await asyncio.gather(
-            blue_agent.investigate(
-                target_path, rules, no_synthesis=no_synthesis, ioc_data=ioc_data
-            ),
-            memory_agent.investigate(
-                memory_path, host=host, no_synthesis=no_synthesis
-            ),
+            blue_agent.investigate(target_path, rules, ioc_data=ioc_data),
+            memory_agent.investigate(memory_path, host=host),
         )
     else:
         print(f"\n{'━'*60}")
-        print(f"  PHASE 1  —  TRIAGE AGENT  (The Optimist)")
+        print(f"  PHASE 1  —  TRIAGE AGENT")
         print(f"{'━'*60}")
         triage_score, triage_hits = await blue_agent.investigate(
-            target_path, rules, no_synthesis=no_synthesis, ioc_data=ioc_data
+            target_path, rules, ioc_data=ioc_data
         )
         mem_score, mem_hits = 0, {}
 
@@ -223,9 +219,9 @@ async def run_investigation(target_path: str, no_synthesis: bool = False,
         _save_unified(host, unified)
         return unified
 
-    # ── Phase 2: Forensic Auditor (The Cynic) ─────────────────────────────
+    # ── Phase 2: Forensic Auditor ──────────────────────────────────────────
     print(f"\n{'━'*60}")
-    print(f"  PHASE 2  —  FORENSIC AUDITOR  (The Cynic)")
+    print(f"  PHASE 2  —  FORENSIC AUDITOR")
     if technique_sources:
         mem_only  = [t for t, s in technique_sources.items() if s == 'memory']
         disk_only = [t for t, s in technique_sources.items() if s == 'disk']
@@ -235,10 +231,15 @@ async def run_investigation(target_path: str, no_synthesis: bool = False,
         if both:      print(f"  Corroborated:  {both}")
     print(f"{'━'*60}")
 
-    auditor = ForensicAuditor()
-    confirmed, inconclusive, refuted, transcript, adjusted_score = await auditor.audit(
+    auditor      = ForensicAuditor()
+    audit_result: AuditResult = await auditor.audit(
         target_path, merged_triage, memory_path=memory_path
     )
+    confirmed      = audit_result['confirmed']
+    inconclusive   = audit_result['inconclusive']
+    refuted        = audit_result['refuted']
+    transcript     = audit_result['transcript']
+    adjusted_score = audit_result['adjusted_score']
 
     transcript_path = os.path.join(_REPORTS, f'{host}-auditor-transcript.json')
     total_rounds = sum(len(e['challenges']) for e in transcript)
@@ -418,9 +419,6 @@ Examples:
   # Simple — auto-discovers disk mount and memory image from case directory
   python3 custom-agent/investigate.py --case /cases/nfury
 
-  # Fast triage only (deterministic, no AI agentic loop — ~2 min)
-  python3 custom-agent/investigate.py --case /cases/nfury --triage
-
   # Full investigation with explicit paths (disk must be pre-mounted)
   python3 custom-agent/investigate.py /mnt/nfury --memory /cases/nfury/mem.001
         """
@@ -430,9 +428,6 @@ Examples:
     parser.add_argument('--case', metavar='CASE_DIR',
                         help='Case directory — auto-discovers disk mount and '
                              'memory image (e.g. /cases/nfury)')
-    parser.add_argument('--triage', action='store_true',
-                        help='Fast mode: deterministic Pass 1 only, no AI '
-                             'agentic loop (~2 min vs ~10 min for full)')
 
     # ── Explicit mode (advanced) ─────────────────────────────────────────────
     parser.add_argument('target', nargs='?',
@@ -445,8 +440,6 @@ Examples:
                              'Nothing is injected if omitted.')
     parser.add_argument('--memory', metavar='MEMORY_PATH',
                         help='Raw memory image path (explicit mode only).')
-    parser.add_argument('--no-synthesis', action='store_true',
-                        help='Alias for --triage.')
     parser.add_argument('--model', metavar='MODEL_ID',
                         default=os.environ.get('VERITAS_MODEL', 'claude-sonnet-4-6'),
                         help='Claude model for agentic loops '
@@ -455,13 +448,6 @@ Examples:
     args = parser.parse_args()
     os.environ['VERITAS_MODEL'] = args.model
     print(f"  Model: {args.model}")
-
-    # Resolve no-synthesis alias
-    no_synthesis = args.triage or args.no_synthesis
-    if no_synthesis:
-        print("\n  ⚡ TRIAGE MODE — deterministic Pass 1 only, no agentic loop.")
-        print("     Use for bulk screening. Run without --triage for full investigation.")
-        print("     False negative rate is significant on EVTX-heavy cases (e.g. nfury).\n")
 
     # ── Case-discovery mode ──────────────────────────────────────────────────
     if args.case:
@@ -477,15 +463,14 @@ Examples:
             # Memory-only: still useful
             print(f"  Running memory-only investigation (no mounted disk found)")
             mem_result = asyncio.run(
-                memory_agent.investigate(memory_path, host=host, no_synthesis=no_synthesis)
+                memory_agent.investigate(memory_path, host=host)
             )
             print(f"\n  Memory score: {mem_result[0]}  techniques: {list(mem_result[1].keys())}")
             return
 
         ioc_data = _resolve_campaign_iocs(args.campaign, _REPORTS)
         os.environ['BLUE_TARGET'] = disk_mount
-        asyncio.run(run_investigation(disk_mount, no_synthesis=no_synthesis,
-                                      memory_path=memory_path, ioc_data=ioc_data))
+        asyncio.run(run_investigation(disk_mount, memory_path=memory_path, ioc_data=ioc_data))
         return
 
     # ── Explicit mode ────────────────────────────────────────────────────────
@@ -504,8 +489,7 @@ Examples:
     ioc_data = _resolve_campaign_iocs(args.campaign, _REPORTS)
 
     os.environ['BLUE_TARGET'] = args.target
-    asyncio.run(run_investigation(args.target, no_synthesis=no_synthesis,
-                                  memory_path=args.memory, ioc_data=ioc_data))
+    asyncio.run(run_investigation(args.target, memory_path=args.memory, ioc_data=ioc_data))
 
 
 if __name__ == '__main__':
