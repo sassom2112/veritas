@@ -471,28 +471,49 @@ Focus on:
 - Credential access (windows.hashdump, windows.lsadump)
 - Command history (windows.cmdline — unusual arguments)
 
-After your investigation, output a JSON array of confirmed findings.
+For each confirmed finding, call record_finding with the exact vol.py output
+that supports it. Do not include techniques you only inferred.
 """
 
-_LAYERED_SYNTHESIS = """\
-Investigation complete. Output a JSON array of your CONFIRMED findings.
-
-Each entry must follow this exact structure:
-{
-  "technique_id": "T1055",
-  "technique_name": "Process Injection",
-  "tool_name": "vol windows.malfind",
-  "tool_output": "EXACT output line — e.g. the VAD record that proves injection",
-  "artifact_hint": "MsMpEng.exe PID 1234 PAGE_EXECUTE_READWRITE at 0x1f081330000"
+# Same schema as disk_agent._RECORD_FINDING_TOOL — kept in sync manually.
+_RECORD_FINDING_TOOL = {
+    'name': 'record_finding',
+    'description': (
+        'Record one confirmed ATT&CK technique finding. '
+        'Call once per confirmed technique. Do not call for INCONCLUSIVE findings.'
+    ),
+    'input_schema': {
+        'type': 'object',
+        'properties': {
+            'technique_id': {
+                'type': 'string',
+                'description': 'MITRE ATT&CK ID, e.g. T1055',
+            },
+            'technique_name': {'type': 'string'},
+            'tool_name': {
+                'type': 'string',
+                'description': 'The vol.py plugin that produced the evidence',
+            },
+            'tool_output': {
+                'type': 'string',
+                'description': (
+                    'Exact vol.py output — copy verbatim, do not paraphrase.'
+                ),
+            },
+            'artifact_hint': {
+                'type': 'string',
+                'description': (
+                    'One-line pointer for the verifier: process name, PID, '
+                    'address, or plugin. E.g. "MsMpEng.exe PID 1234 PAGE_EXECUTE_READWRITE"'
+                ),
+            },
+        },
+        'required': [
+            'technique_id', 'technique_name', 'tool_name',
+            'tool_output', 'artifact_hint',
+        ],
+    },
 }
-
-Rules:
-- Only include techniques where vol.py returned direct evidence.
-- tool_output must be the ACTUAL TEXT from a vol.py call, not a paraphrase.
-- If no techniques confirmed, output: []
-
-Respond with ONLY the JSON array. No prose, no markdown fences.
-"""
 
 
 async def investigate_layered(
@@ -500,10 +521,10 @@ async def investigate_layered(
     host: str,
 ) -> 'list':  # list[LayerClaim] — import deferred to avoid circular
     """
-    Memory investigation producing LayerClaim list for cross-layer verification.
+    Memory investigation producing LayerClaim list for same-layer + cross-layer verification.
     Uses VERITAS_LAYER=memory server — disk tools are structurally unavailable.
+    Synthesis uses forced tool_use (record_finding) — no text parsing.
     """
-    import re
     from contracts import LayerClaim
 
     client = anthropic.Anthropic()
@@ -583,36 +604,43 @@ async def investigate_layered(
                     })
                 messages.append({'role': 'user', 'content': results_block})
 
-            # Structured synthesis
-            messages.append({'role': 'user', 'content': _LAYERED_SYNTHESIS})
+            # ── Structured synthesis (forced tool_use — no text parsing) ──
+            messages.append({
+                'role': 'user',
+                'content': (
+                    'Investigation complete. For each technique where vol.py returned '
+                    'direct evidence, call record_finding once with the exact output. '
+                    'Only call it for techniques with concrete memory evidence — '
+                    'a VAD record, process entry, network connection, or hash. '
+                    'Do not call it for techniques you only inferred.'
+                ),
+            })
             synthesis = client.messages.create(
                 model=os.environ.get('VERITAS_MODEL', 'claude-sonnet-4-6'),
                 max_tokens=2048,
                 system=_LAYERED_SYSTEM,
                 messages=messages,
-                tools=[],
+                tools=[_RECORD_FINDING_TOOL],
+                tool_choice={'type': 'any'},
             )
-            raw_text = synthesis.content[0].text if synthesis.content else '[]'
-
-    # Parse LayerClaims
-    raw_text = re.sub(r'```(?:json)?\s*', '', raw_text).strip()
-    try:
-        raw = json.loads(raw_text)
-    except json.JSONDecodeError:
-        m = re.search(r'\[.*\]', raw_text, re.DOTALL)
-        raw = json.loads(m.group(0)) if m else []
 
     claims: list[LayerClaim] = []
-    for entry in raw:
-        if not isinstance(entry, dict) or not entry.get('technique_id'):
+    for block in synthesis.content:
+        if not hasattr(block, 'type') or block.type != 'tool_use':
+            continue
+        if block.name != 'record_finding':
+            continue
+        inp = block.input
+        tid = inp.get('technique_id', '').strip()
+        if not tid:
             continue
         claims.append(LayerClaim(
-            technique_id=entry['technique_id'].strip(),
-            technique_name=entry.get('technique_name', entry['technique_id']),
+            technique_id=tid,
+            technique_name=inp.get('technique_name', tid),
             source_layer='memory',
-            tool_name=entry.get('tool_name', 'vol'),
-            tool_output=entry.get('tool_output', '')[:2000],
-            artifact_hint=entry.get('artifact_hint', '')[:200],
+            tool_name=inp.get('tool_name', 'vol'),
+            tool_output=inp.get('tool_output', '')[:2000],
+            artifact_hint=inp.get('artifact_hint', '')[:200],
         ))
 
     # Write audit log

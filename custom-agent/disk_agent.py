@@ -21,7 +21,6 @@ import asyncio
 import json
 import logging
 import os
-import re
 import sys
 from datetime import datetime, timezone
 from mcp import ClientSession, StdioServerParameters
@@ -35,8 +34,58 @@ logging.getLogger('mcp').setLevel(logging.WARNING)
 _HERE    = os.path.dirname(os.path.abspath(__file__))
 _REPORTS = os.path.normpath(os.path.join(_HERE, '..', 'reports'))
 
-MAX_ROUNDS         = 5   # investigation rounds
-TOOLS_PER_ROUND    = 3   # tool calls per round
+MAX_ROUNDS         = 5   # Phase 1 investigation rounds
+TOOLS_PER_ROUND    = 3   # Phase 1 tool calls per round
+# Phase 2 (same-layer verification) budget is set in verifier.py:
+#   MAX_VERIFY_ROUNDS=2, TOOLS_PER_VERIFY=2  →  4 calls/claim
+# Phase 3 (cross-layer corroboration) uses the same 4-call cap.
+# Target: Phase 1 + Phase 2 + Phase 3 ≤ 100 tool calls/host, ≤ $20.
+
+# Forced tool schema for claim synthesis — model MUST call this, cannot return prose.
+# Defined here (not in sift_server.py) because it is a reporting primitive,
+# not a forensic tool. The synthesis turn never connects to the MCP server.
+_RECORD_FINDING_TOOL = {
+    'name': 'record_finding',
+    'description': (
+        'Record one confirmed ATT&CK technique finding. '
+        'Call once per confirmed technique. Do not call for INCONCLUSIVE findings.'
+    ),
+    'input_schema': {
+        'type': 'object',
+        'properties': {
+            'technique_id': {
+                'type': 'string',
+                'description': 'MITRE ATT&CK ID, e.g. T1569.002',
+            },
+            'technique_name': {
+                'type': 'string',
+                'description': 'Human-readable technique name',
+            },
+            'tool_name': {
+                'type': 'string',
+                'description': 'The SIFT tool that produced the evidence, e.g. "find"',
+            },
+            'tool_output': {
+                'type': 'string',
+                'description': (
+                    'The EXACT output text from your tool call that proves this technique. '
+                    'Copy verbatim — do not paraphrase.'
+                ),
+            },
+            'artifact_hint': {
+                'type': 'string',
+                'description': (
+                    'One-line pointer for the verifier: what to look for and where. '
+                    'E.g. "psexesvc.exe at /mnt/nfury/Windows/psexesvc.exe"'
+                ),
+            },
+        },
+        'required': [
+            'technique_id', 'technique_name', 'tool_name',
+            'tool_output', 'artifact_hint',
+        ],
+    },
+}
 
 _DISK_AGENT_SYSTEM = """\
 You are the Disk Investigation Agent. You have access to disk-only forensic tools:
@@ -67,26 +116,6 @@ Call tools freely. After your investigation, you will be asked to output
 structured JSON claims for each confirmed technique.
 """
 
-_SYNTHESIS_PROMPT = """\
-Investigation complete. Output a JSON array of your CONFIRMED findings.
-
-Each entry must follow this exact structure:
-{
-  "technique_id": "T1569.002",
-  "technique_name": "System Services: Service Execution",
-  "tool_name": "find",
-  "tool_output": "EXACT output line that proves this — e.g. the file path returned by find",
-  "artifact_hint": "psexesvc.exe at /mnt/nfury/Windows/psexesvc.exe"
-}
-
-Rules:
-- Only include techniques where you found PHYSICAL DISK EVIDENCE in your tool calls above.
-- tool_output must be the ACTUAL TEXT from a tool call, not a paraphrase.
-- artifact_hint is a one-line pointer for the cross-verifier (what to look for and where).
-- If no techniques confirmed, output: []
-
-Respond with ONLY the JSON array. No prose, no markdown fences.
-"""
 
 
 class DiskAgent:
@@ -198,18 +227,31 @@ class DiskAgent:
 
                     messages.append({'role': 'user', 'content': tool_results})
 
-                # ── Structured synthesis ──────────────────────────────────
-                messages.append({'role': 'user', 'content': _SYNTHESIS_PROMPT})
+                # ── Structured synthesis (forced tool_use — no text parsing) ──
+                # tool_choice=any forces the model to call record_finding for each
+                # confirmed technique. It cannot return prose. If nothing confirmed,
+                # the model returns end_turn without calling the tool → empty list.
+                messages.append({
+                    'role': 'user',
+                    'content': (
+                        'Investigation complete. For each technique where you found '
+                        'PHYSICAL DISK EVIDENCE in the tool calls above, call '
+                        'record_finding once. Only call it for techniques with a '
+                        'concrete artifact — a file path, registry value, or binary '
+                        'content returned by an actual tool. Do not call it for '
+                        'techniques you only inferred or suspected.'
+                    ),
+                })
                 synthesis = self.client.messages.create(
                     model=os.environ.get('VERITAS_MODEL', 'claude-sonnet-4-6'),
                     max_tokens=2048,
                     system=_DISK_AGENT_SYSTEM,
                     messages=messages,
-                    tools=[],  # no tools in synthesis turn — text output only
+                    tools=[_RECORD_FINDING_TOOL],
+                    tool_choice={'type': 'any'},
                 )
 
-                raw_text = synthesis.content[0].text if synthesis.content else '[]'
-                claims = self._parse_claims(raw_text, target_path, tool_count)
+                claims = self._collect_claims(synthesis.content)
 
                 # Write tool log to audit file
                 self._write_audit(target_path, all_tool_outputs, claims)
@@ -220,41 +262,30 @@ class DiskAgent:
 
                 return claims
 
-    def _parse_claims(
-        self,
-        text: str,
-        target_path: str,
-        tool_count: int,
-    ) -> list[LayerClaim]:
-        # Strip markdown fences if present
-        text = re.sub(r'```(?:json)?\s*', '', text).strip()
-        try:
-            raw = json.loads(text)
-        except json.JSONDecodeError:
-            # Try to extract a JSON array from the text
-            m = re.search(r'\[.*\]', text, re.DOTALL)
-            if m:
-                try:
-                    raw = json.loads(m.group(0))
-                except json.JSONDecodeError:
-                    raw = []
-            else:
-                raw = []
-
+    @staticmethod
+    def _collect_claims(content: list) -> list[LayerClaim]:
+        """
+        Extract LayerClaims from synthesis response content blocks.
+        Each tool_use block with name='record_finding' is one claim.
+        No text parsing — structure is enforced by tool_choice=any.
+        """
         claims: list[LayerClaim] = []
-        for entry in raw:
-            if not isinstance(entry, dict):
+        for block in content:
+            if not hasattr(block, 'type') or block.type != 'tool_use':
                 continue
-            tid = entry.get('technique_id', '').strip()
+            if block.name != 'record_finding':
+                continue
+            inp = block.input
+            tid = inp.get('technique_id', '').strip()
             if not tid:
                 continue
             claims.append(LayerClaim(
                 technique_id=tid,
-                technique_name=entry.get('technique_name', tid),
+                technique_name=inp.get('technique_name', tid),
                 source_layer='disk',
-                tool_name=entry.get('tool_name', 'unknown'),
-                tool_output=entry.get('tool_output', '')[:2000],
-                artifact_hint=entry.get('artifact_hint', '')[:200],
+                tool_name=inp.get('tool_name', 'unknown'),
+                tool_output=inp.get('tool_output', '')[:2000],
+                artifact_hint=inp.get('artifact_hint', '')[:200],
             ))
         return claims
 
