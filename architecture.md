@@ -6,7 +6,7 @@ permalink: /architecture
 
 # Architecture
 
-Two agents. Zero shared state. One rule: `CONFIRMED` requires a positive tool return.
+Three agents. Zero shared state. One rule: `CONFIRMED` requires a positive tool return.
 
 ---
 

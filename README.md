@@ -26,9 +26,9 @@ off disk. Model confidence produces neither CONFIRMED nor REFUTED.
 
 ---
 
-## Why Two Agents
+## Why the Adversarial Architecture Works
 
-This is the same architectural pattern as constraint projection in adversarial ML — you don't fix the problem by optimizing the thing that produces bad outputs, you build the layer that forces outputs back into valid space before they count. The Auditor is that layer. It doesn't care how confident the Triage Agent was. It only cares what the filesystem says.
+This is the same architectural pattern as constraint projection in adversarial ML — you don't fix the problem by optimizing the thing that produces bad outputs, you build the layer that forces outputs back into valid space before they count. The Auditor is that layer. It doesn't care how confident the Disk Agent or Memory Agent was. It only cares what the filesystem says.
 
 The Disk Agent and Memory Agent are structurally decoupled from the Auditor: the Auditor receives the findings list and nothing else. No investigation context, no Phase 1 scores, no technique labels. If it can't re-derive the finding from physical bytes in an isolated MCP session, the finding doesn't ship. Wide triage + adversarial verification is the correct two-stage architecture — not triage alone, not verification alone.
 

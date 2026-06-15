@@ -7,7 +7,7 @@ permalink: /how-it-works
 # How VERITAS Works
 {: .fs-9 }
 
-Explained as a two-player game.
+Three agents. One adversarial rule. Evidence or nothing.
 {: .fs-6 .fw-300 }
 
 ---
