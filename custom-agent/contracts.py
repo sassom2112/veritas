@@ -78,18 +78,36 @@ class CrossVerdict(TypedDict):
     citation: str | None      # what the verifying layer found, or None
 
 
+class SameLayerVerdict(TypedDict):
+    """
+    Phase 2 (primary gate) result — same-layer blind replication.
+
+    The verifier receives tool_output + artifact_hint only; investigator
+    reasoning is quarantined. Independence is structural, not prompt-based.
+    See ~/research/epistemic-through-line.md for the formal statement.
+    """
+    technique_id: str
+    source_layer: str         # "disk" | "memory" — matches the original claim's layer
+    verdict: str              # "CONFIRMED" | "REFUTED" | "INCONCLUSIVE"
+    citation: str | None      # what the verifier independently found (or why not)
+
+
 class FinalTechniqueResult(TypedDict):
     """
-    Adjudicated result after both layers have been heard.
+    Adjudicated result after Phase 2 (same-layer) and Phase 3 (cross-layer).
 
-    CONFIRMED    — source confirmed + cross-layer CORROBORATED (highest confidence)
-    SINGLE_SOURCE — source confirmed + cross-layer NO_VISIBILITY (single-sourced)
-    DISPUTED     — source confirmed but cross-layer CONTRADICTED (needs human review)
-    REFUTED      — source found no evidence
+    same_verdict drives final; cross_verdict is annotation only.
+
+    HIGH_CONFIRMED — Phase 2 CONFIRMED + Phase 3 CORROBORATED
+    CONFIRMED      — Phase 2 CONFIRMED + Phase 3 NO_VISIBILITY (single-sourced)
+    DISPUTED       — Phase 2 CONFIRMED + Phase 3 CONTRADICTED (human review needed)
+    REFUTED        — Phase 2 REFUTED
+    INCONCLUSIVE   — Phase 2 INCONCLUSIVE
     """
     technique_id: str
     technique_name: str
     source_layer: str
-    cross_verdict: str        # raw CrossVerdict.verdict
-    final: str                # "CONFIRMED" | "SINGLE_SOURCE" | "DISPUTED" | "REFUTED"
+    same_verdict: str         # raw SameLayerVerdict.verdict — drives final
+    cross_verdict: str        # raw CrossVerdict.verdict — annotation only
+    final: str                # "HIGH_CONFIRMED" | "CONFIRMED" | "DISPUTED" | "REFUTED" | "INCONCLUSIVE"
     citation: str | None

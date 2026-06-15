@@ -41,27 +41,17 @@ Requires a Windows disk image mounted read-only at a path like `/mnt/hostname`.
 
 ---
 
-## Path A — Fast triage, no API key (< 10 seconds)
+## Full adversarial pipeline
 
 ```bash
-python3 fast-triage/fast_triage.py /mnt/hostname
+# Auto-discovers disk mount and memory image from case directory
+python3 custom-agent/investigate.py --case /cases/hostname
+
+# Explicit paths (disk must be pre-mounted via ewfmount)
+python3 custom-agent/investigate.py /mnt/hostname --memory /cases/hostname/mem.001
 ```
 
-Runs ~25 SIFT commands deterministically. Flags artifact candidates against a corpus-calibrated starting-point signal library. Auto-escalates to the full adversarial pipeline if warranted. No API key required — use this to decide whether an image is worth the full $14 investigation.
-
----
-
-## Path B — Full adversarial pipeline
-
-```bash
-# Terminal 1
-python3 custom-agent/sift_server.py
-
-# Terminal 2
-python3 custom-agent/investigate.py /mnt/hostname
-```
-
-Runs Triage → Auditor → HTML report.
+Runs Disk Agent + Memory Agent (parallel) → Forensic Auditor → HTML report.
 
 **Campaign mode** — declare prior hosts explicitly to propagate confirmed IOCs:
 
@@ -75,7 +65,7 @@ Host names resolve to `reports/<host>-iocs.json`. Explicit declaration required 
 
 ---
 
-## Path C — Rebuild signal weights
+## Rebuild signal weights
 
 ```bash
 # Recalibrate corpus weights from MalwareBazaar + HybridAnalysis

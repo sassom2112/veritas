@@ -47,6 +47,7 @@ from auditor_agent import ForensicAuditor
 from contracts import AuditResult, FinalTechniqueResult, TriageHandoff
 from cross_verifier import CrossVerifier, adjudicate
 from disk_agent import DiskAgent
+from verifier import verify_same_layer
 from extract_iocs import extract_iocs, merge_iocs
 from html_report import generate_report
 
@@ -121,12 +122,12 @@ async def run_cross_layer(
     Architecture:
       1. DiskAgent and memory_agent.investigate_layered() run in parallel
          with disjoint tool grants (VERITAS_LAYER=disk / VERITAS_LAYER=memory).
-      2. CrossVerifier: each layer's claims verified by the opposite layer.
+      2. Same-layer blind replication (PRIMARY GATE): fresh sessions per claim,
+         same layer's tools, receives tool_output + artifact_hint only — no reasoning.
+      3. Cross-layer corroboration (BONUS): CONFIRMED claims only, opposite layer.
          Disk claims → memory verifier.  Memory claims → disk verifier.
-      3. Adjudication: CONFIRMED | SINGLE_SOURCE | DISPUTED | REFUTED.
-
-    A hallucinated claim has no causal twin in the other layer.
-    Real execution leaves traces in both — the cross-verdict proves it.
+      4. Adjudication: same-layer drives verdict, cross-layer annotates.
+         HIGH_CONFIRMED | CONFIRMED | DISPUTED | REFUTED | INCONCLUSIVE.
     """
     from memory_agent import investigate_layered as mem_investigate_layered
 
@@ -157,52 +158,72 @@ async def run_cross_layer(
     print(f"\n  Phase 1 complete: {len(disk_claims)} disk claims, "
           f"{len(memory_claims)} memory claims")
 
-    # ── Phase 2: Cross-layer verification ──────────────────────────────────
+    # ── Phase 2: Same-layer blind replication (PRIMARY GATE) ──────────────
+    all_claims = disk_claims + memory_claims
+    same_layer_verdicts = await verify_same_layer(all_claims, target_path, memory_path)
+
+    same_verdict_map = {v['technique_id']: v for v in same_layer_verdicts}
+    confirmed_disk   = [c for c in disk_claims
+                        if same_verdict_map.get(c['technique_id'], {}).get('verdict') == 'CONFIRMED']
+    confirmed_memory = [c for c in memory_claims
+                        if same_verdict_map.get(c['technique_id'], {}).get('verdict') == 'CONFIRMED']
+
+    print(f"\n  Phase 2 gate: {len(confirmed_disk)} disk / {len(confirmed_memory)} memory pass to Phase 3")
+
+    # ── Phase 3: Cross-layer corroboration (CONFIRMED claims only) ─────────
     print(f"\n{'━'*60}")
-    print(f"  PHASE 2  —  CROSS-LAYER VERIFICATION")
-    print(f"  Disk claims → memory verifier | Memory claims → disk verifier")
+    print(f"  PHASE 3  —  CROSS-LAYER CORROBORATION")
+    print(f"  Confirmed disk → memory verifier | Confirmed memory → disk verifier")
     print(f"{'━'*60}")
 
     disk_verdicts, memory_verdicts = await CrossVerifier().verify_all(
-        disk_claims, memory_claims, target_path, memory_path
+        confirmed_disk, confirmed_memory, target_path, memory_path
     )
 
-    # ── Phase 3: Adjudication and report ───────────────────────────────────
+    # ── Phase 4: Adjudication and report ───────────────────────────────────
     print(f"\n{'━'*60}")
-    print(f"  PHASE 3  —  ADJUDICATION")
+    print(f"  PHASE 4  —  ADJUDICATION")
     print(f"{'━'*60}")
 
-    results = adjudicate(disk_claims, memory_claims, disk_verdicts, memory_verdicts)
+    results = adjudicate(same_layer_verdicts, disk_claims, memory_claims,
+                         disk_verdicts, memory_verdicts)
 
     elapsed = (datetime.now(timezone.utc) - started).total_seconds()
 
-    confirmed     = [r for r in results if r['final'] == 'CONFIRMED']
-    single_source = [r for r in results if r['final'] == 'SINGLE_SOURCE']
-    disputed      = [r for r in results if r['final'] == 'DISPUTED']
+    high_confirmed = [r for r in results if r['final'] == 'HIGH_CONFIRMED']
+    confirmed      = [r for r in results if r['final'] == 'CONFIRMED']
+    disputed       = [r for r in results if r['final'] == 'DISPUTED']
+    refuted        = [r for r in results if r['final'] == 'REFUTED']
+    inconclusive   = [r for r in results if r['final'] == 'INCONCLUSIVE']
 
-    print(f"\n  CONFIRMED (cross-layer corroborated): {len(confirmed)}")
+    if high_confirmed:
+        print(f"\n  HIGH_CONFIRMED (same-layer + cross-layer corroborated): {len(high_confirmed)}")
+        for r in high_confirmed:
+            print(f"    {r['technique_id']}  [{r['source_layer']}]  {(r['citation'] or '')[:50]}")
+    print(f"  CONFIRMED (same-layer verified, no cross-layer visibility): {len(confirmed)}")
     for r in confirmed:
-        print(f"    {r['technique_id']}  [{r['source_layer']}→cross]  {r['citation'] or ''[:50]}")
-    print(f"  SINGLE_SOURCE (one layer, no visibility other): {len(single_source)}")
-    for r in single_source:
         print(f"    {r['technique_id']}  [{r['source_layer']}]")
     if disputed:
-        print(f"  DISPUTED (layers contradict — review required): {len(disputed)}")
+        print(f"  DISPUTED (same-layer confirmed, cross-layer contradicted): {len(disputed)}")
         for r in disputed:
-            print(f"    {r['technique_id']}  *** REVIEW ***")
+            print(f"    {r['technique_id']}  *** HUMAN REVIEW REQUIRED ***")
+    print(f"  REFUTED (same-layer found contradicting evidence): {len(refuted)}")
+    print(f"  INCONCLUSIVE (same-layer insufficient visibility): {len(inconclusive)}")
 
     unified = {
-        'generated':      datetime.now(timezone.utc).isoformat(),
-        'target':         target_path,
-        'memory_path':    memory_path,
-        'pipeline':       'cross-layer-verification',
-        'elapsed_s':      round(elapsed, 1),
-        'disk_claims':    len(disk_claims),
-        'memory_claims':  len(memory_claims),
-        'confirmed':      [r['technique_id'] for r in confirmed],
-        'single_source':  [r['technique_id'] for r in single_source],
-        'disputed':       [r['technique_id'] for r in disputed],
-        'results':        list(results),
+        'generated':       datetime.now(timezone.utc).isoformat(),
+        'target':          target_path,
+        'memory_path':     memory_path,
+        'pipeline':        'cross-layer-verification',
+        'elapsed_s':       round(elapsed, 1),
+        'disk_claims':     len(disk_claims),
+        'memory_claims':   len(memory_claims),
+        'high_confirmed':  [r['technique_id'] for r in high_confirmed],
+        'confirmed':       [r['technique_id'] for r in confirmed],
+        'disputed':        [r['technique_id'] for r in disputed],
+        'refuted':         [r['technique_id'] for r in refuted],
+        'inconclusive':    [r['technique_id'] for r in inconclusive],
+        'results':         list(results),
     }
 
     path = os.path.join(_REPORTS, f'{host}-cross-layer-investigation.json')
@@ -212,10 +233,12 @@ async def run_cross_layer(
 
     print(f"\n{'═'*60}")
     print(f"  CROSS-LAYER INVESTIGATION COMPLETE  ({elapsed:.0f}s)")
-    print(f"  Confirmed:    {len(confirmed)}")
-    print(f"  Single-source:{len(single_source)}")
-    print(f"  Disputed:     {len(disputed)}")
-    print(f"  Report:       {path}")
+    print(f"  High confirmed:  {len(high_confirmed)}")
+    print(f"  Confirmed:       {len(confirmed)}")
+    print(f"  Disputed:        {len(disputed)}")
+    print(f"  Refuted:         {len(refuted)}")
+    print(f"  Inconclusive:    {len(inconclusive)}")
+    print(f"  Report:          {path}")
     print(f"{'═'*60}\n")
 
     return unified

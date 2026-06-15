@@ -45,14 +45,11 @@ git clone https://github.com/sassom2112/find-evil-2026.git
 pip install -r requirements.txt
 export ANTHROPIC_API_KEY="sk-ant-..."
 
-# Terminal 1 — MCP forensic tool server
-python3 custom-agent/sift_server.py
+# Full investigation — auto-discovers disk mount + memory image
+python3 custom-agent/investigate.py --case /cases/hostname
 
-# Terminal 2 — full investigation
-python3 custom-agent/investigate.py --case /mnt/hostname
-
-# Fast triage only — no API key, < 10 seconds
-python3 fast-triage/fast_triage.py /mnt/hostname
+# Explicit paths (disk must be pre-mounted via ewfmount)
+python3 custom-agent/investigate.py /mnt/hostname --memory /cases/hostname/mem.001
 ```
 
 Requires a Windows disk image mounted read-only on a SANS SIFT Workstation.

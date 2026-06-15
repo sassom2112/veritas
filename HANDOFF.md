@@ -1,169 +1,262 @@
 # Handoff — future/cross-layer-verification (2026-06-14)
 
-## Current task
-Pre-sprint hardening before implementing Phase 2 (same-layer blind replication) in
-`custom-agent/` on the `future/cross-layer-verification` branch. Three gates must
-pass before writing new verification code: (1) fix JSON parse fragility in
-`disk_agent.py`, (2) set Phase 2 budget caps, (3) this handoff.
+## Current state
 
-## What's been tried
+The cross-layer verification sprint is complete. The pipeline now has three phases:
 
-- **Cross-layer-only verification (`cross_verifier.py`)** — built and committed in
-  `1baf74b`, but identified as architecturally wrong as the *primary* gate. It routes
-  disk claims to a memory verifier and memory claims to a disk verifier. This gives a
-  *different view*, not *independence*. Independence comes from a fresh agent session
-  with no access to the first agent's reasoning chain, regardless of which layer's tools
-  it uses. Accepted as Phase 3 (bonus cross-layer corroboration). Rejected as Phase 2.
+| Phase | File | Status |
+|---|---|---|
+| Phase 1: Investigation | `disk_agent.py` + `memory_agent.investigate_layered()` | Done, committed |
+| Phase 2: Same-layer blind replication (PRIMARY GATE) | `verifier.py` | Done, **uncommitted** |
+| Phase 3: Cross-layer corroboration (bonus) | `cross_verifier.py` | Done, **uncommitted** |
+| Orchestration | `investigate.py run_cross_layer()` | Done, **uncommitted** |
+| Contracts | `contracts.py` | Updated, **uncommitted** |
 
-- **Same-layer blind replication** — identified as the correct primary gate. A fresh
-  disk session receives a disk `LayerClaim` (technique_id + tool_output + artifact_hint,
-  no reasoning) and independently re-runs disk tools to confirm or deny. A fresh memory
-  session does the same for memory claims. Not yet implemented — this is the sprint target.
+**Uncommitted files (commit before next sprint):**
+- `custom-agent/verifier.py` — new, real MCP session implementation
+- `custom-agent/contracts.py` — added `SameLayerVerdict`, updated `FinalTechniqueResult`
+- `custom-agent/cross_verifier.py` — `adjudicate()` now takes `same_layer_verdicts` as primary
+- `custom-agent/investigate.py` — Phase 2 wired before Phase 3; updated phase labels
 
-- **JSON synthesis in `disk_agent.py._parse_claims()`** — current implementation asks
-  for a JSON array in a final text turn, then tries `json.loads()` with a regex fallback.
-  Fragile: the LLM occasionally wraps the array in prose or markdown fences that defeat
-  the regex. Accepted as a known bug. Fix: replace the text-synthesis turn with a forced
-  `tool_use` turn using `tool_choice={"type": "any"}` and a `record_finding` tool schema
-  defined inline in `disk_agent.py` (not in `sift_server.py` — it's a reporting tool,
-  not a forensic tool). Same fix needs to be applied to `memory_agent.investigate_layered()`.
+**Hackathon deadline: June 15, 2026.** Demo video + Devpost submission still required.
+SIFT workstation: `192.168.1.71` (ping before assuming online).
+nfury ground truth: `reports/nfury-auditor-transcript.json` — 15 confirmed, 4 refuted.
 
-## Exact next step
+---
 
-**Step 1 — Fix JSON fragility in `disk_agent.py` and `memory_agent.py`:**
+## What was built this session
 
-In `disk_agent.DiskAgent._synthesis_turn()` (currently the block that appends
-`_SYNTHESIS_PROMPT` to messages and calls `client.messages.create` with `tools=[]`):
-Replace `tools=[]` with a `record_finding` tool definition:
+**`verifier.py`** — Phase 2 same-layer blind replication.
+- Real MCP session per claim, `VERITAS_LAYER=claim['source_layer']`
+- `_build_verifier_message()` is the enforcement point: only `technique_id`, `tool_output`,
+  `artifact_hint` cross to the verifier. Reasoning never crosses.
+- `_RECORD_VERDICT_TOOL` + `tool_choice={'type': 'any'}` — forced structured verdict, no text parsing
+- `MAX_VERIFY_CALLS = 4` per claim
+- All claims verified concurrently via `asyncio.gather`
 
+**`contracts.py`** — Added `SameLayerVerdict` TypedDict. Updated `FinalTechniqueResult`:
+- `same_verdict` field added (drives `final`)
+- `final` values: `HIGH_CONFIRMED | CONFIRMED | DISPUTED | REFUTED | INCONCLUSIVE`
+- `cross_verdict` is now annotation-only — cannot rescue a Phase 2 REFUTED
+
+**`cross_verifier.adjudicate()`** — new signature:
 ```python
-_RECORD_FINDING_TOOL = {
-    "name": "record_finding",
-    "description": "Record a confirmed technique finding with its physical evidence.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "technique_id":   {"type": "string", "description": "MITRE ATT&CK ID, e.g. T1569.002"},
-            "technique_name": {"type": "string"},
-            "tool_name":      {"type": "string", "description": "The tool that produced the evidence"},
-            "tool_output":    {"type": "string", "description": "Exact tool output — not a paraphrase"},
-            "artifact_hint":  {"type": "string", "description": "One-line pointer for the verifier"},
-        },
-        "required": ["technique_id", "technique_name", "tool_name", "tool_output", "artifact_hint"],
+adjudicate(same_layer_verdicts, disk_claims, memory_claims, disk_verdicts, memory_verdicts)
+```
+`_final()` function: same_verdict drives, cross_verdict annotates. Phase 3 CORROBORATED
+upgrades CONFIRMED → HIGH_CONFIRMED.
+
+**`investigate.py run_cross_layer()`** — Phase 2 now runs between Phase 1 and Phase 3.
+Only Phase 2 CONFIRMED claims go to Phase 3.
+
+**All docs updated** — `README.md`, `architecture.md`, `SUBMISSION.md`, `index.md`, `the-game.md`:
+- "Cynic/Optimist" removed; replaced with "Disk Agent", "Memory Agent", "Auditor"
+- `fast-triage/fast_triage.py` references removed
+- Terminal 1/2 startup pattern corrected (sift_server spawns automatically)
+- "Three hosts" → "Four hosts" throughout
+
+**Epistemic through-line** saved to `/home/username/research/epistemic-through-line.md` —
+the formal argument that VERITAS blinded replication and CATT-CCS constraint inflation
+are the same epistemic argument in two domains. Memory index updated.
+
+---
+
+## Sprint backlog (ordered by value)
+
+Mapped against the Google "New SDLC with Vibe Coding" whitepaper (May 2026). Each sprint
+addresses a specific gap between VERITAS's current harness and agentic engineering best practice.
+
+---
+
+### Sprint 1 — Harness documentation (AGENTS.md)
+
+**Whitepaper gap:** "Set up an AGENTS.md. Start with ten lines: stack, conventions, hard
+rules, workflow. Add a rule every time the agent does something it should not do again."
+VERITAS has the harness implemented in code but it isn't configurable without editing source.
+A cold Claude session cloning this repo has no rule file.
+
+**Deliverable:** `AGENTS.md` at repo root. Contents:
+- Agent roles: Disk Agent (`blue_agent.py`), Memory Agent (`memory_agent.py`),
+  Auditor (`auditor_agent.py`), Verifier (`verifier.py`)
+- Tool grants per agent (VERITAS_LAYER values, binary allowlists per layer)
+- Budget caps per phase: Phase 1 (15 calls/agent), Phase 2 (4 calls/claim),
+  Phase 3 (4 calls/claim), target ≤ $20/host
+- What each agent receives / explicitly does not receive (the information boundary)
+- Verdict definitions: CONFIRMED requires positive tool return; INCONCLUSIVE ≠ REFUTED
+- Hard rules: no sift_server manual startup, no fast_triage path, no Cynic/Optimist names
+
+**Also:** Extract system prompts from Python files into versioned config strings in a
+single `prompts.py` or `prompts/` directory. Current state: `_DISK_AGENT_SYSTEM`,
+`_VERIFIER_SYSTEM`, `_AUDITOR_SYSTEM` are hardcoded strings buried in agent files.
+
+---
+
+### Sprint 2 — Eval harness (output + trajectory)
+
+**Whitepaper gap:** "Without both [tests and evals], the practice is always vibe coding,
+regardless of how sophisticated the prompts are." VERITAS has ground truth (48 claims,
+32/16 across 4 hosts) but no automated eval. We cannot verify that a code change didn't
+break the results. We do not evaluate whether the agent used the right tools in the right order.
+
+**Two eval types the whitepaper distinguishes:**
+- **Output eval:** Does `run_investigation()` produce the correct CONFIRMED/REFUTED set?
+- **Trajectory eval:** Does the audit log show the expected tool sequence for known
+  techniques? (T1569.002 should always call `find` or `fls` looking for `psexesvc.exe`;
+  T1055 should always include `malfind`.)
+
+**Deliverable:** `evals/` directory:
+```
+evals/
+  ground_truth/
+    nfury.json         # 19 claims, expected verdicts per technique
+    tdungan.json       # 17 claims
+    nromanoff.json     # 7 claims
+    rocba.json         # 5 claims
+  eval_output.py       # runs against synthetic image, compares final verdicts
+  eval_trajectory.py   # parses audit_log.jsonl, checks tool sequence per technique
+  run_evals.sh         # runs both suites, exits 1 on regression
+```
+
+**Gate:** `run_evals.sh` must pass before any Sprint 3+ code merges to main.
+This is the regression suite the whitepaper says should exist before AI changes anything.
+
+---
+
+### Sprint 3 — Technique playbooks as dynamic skills
+
+**Whitepaper gap:** "Agent Skills: structured portable packages of procedural knowledge
+that the agent loads only when the task calls for it... the agent sees only lightweight
+metadata at startup, loads full instructions when a task matches."
+Every VERITAS system prompt is fully static. The Auditor reads generic investigation
+instructions when it should load a T1055-specific playbook vs. a T1569-specific playbook.
+This is the paper's "context rot from overloaded prompts."
+
+**Deliverable:** `skills/` directory with per-technique verification playbooks:
+```
+skills/
+  T1055-process-injection.md    # malfind first, vadwalk PID, dumpfiles physaddr
+  T1003.001-lsass-dump.md       # comsvcs, procdump, strings on suspicious binary
+  T1569.002-psexec.md           # find psexesvc.exe, fls at Windows/System32
+  T1071.001-c2-web.md           # netscan ESTABLISHED, check against CDN list
+  ...
+```
+
+The Auditor loads the relevant skill for the technique being challenged. Generic system
+prompt drops from ~2KB to ~300 tokens per challenge. Technique-specific playbook adds
+~200 tokens on demand. Net: same information, lower token cost, higher signal density.
+
+**Wire-in:** `auditor_agent.py` loads skill by technique_id before each challenge round.
+Skills can be updated without touching agent code — they're config, not source.
+
+---
+
+### Sprint 4 — Model routing
+
+**Whitepaper gap:** "Uses large, advanced models for complex tasks; routes deterministic/
+lower-complexity tasks to smaller, faster, cheaper models."
+VERITAS runs `claude-sonnet-4-6` for everything, including verdict synthesis turns where
+the model has 4 tool outputs and just needs to call `record_verdict`.
+
+**Routing table:**
+| Task | Current | Target | Reason |
+|---|---|---|---|
+| Investigation reasoning (disk/memory) | sonnet-4-6 | sonnet-4-6 | Complex, keep |
+| Auditor challenge reasoning | sonnet-4-6 | sonnet-4-6 | High stakes, keep |
+| Verdict synthesis (`record_verdict`) | sonnet-4-6 | haiku-4-5 | Tool call only, no reasoning |
+| Claim synthesis (`record_finding`) | sonnet-4-6 | haiku-4-5 | Tool call only, no reasoning |
+| Pass 1 scoring | no model | no model | Already correct |
+
+**Target:** Cut per-host cost from ~$14 to ~$8 without changing verdict quality.
+Measurable with the Sprint 2 eval harness — if output eval passes after routing change,
+the routing is safe.
+
+**Implementation:** `os.environ.get('VERITAS_SYNTHESIS_MODEL', 'claude-haiku-4-5-20251001')`
+separate from `VERITAS_MODEL`. Synthesis turns use synthesis model; investigation turns
+use investigation model.
+
+---
+
+### Sprint 5 — Observability layer
+
+**Whitepaper gap:** "Observability: Logs, traces, evaluations, cost and latency metering.
+Without observability, there is no way to tell whether the agent is doing well or quietly drifting."
+VERITAS knows total cost (~$14) from manual inspection. We cannot see where cost goes
+within an investigation or whether it's drifting upward across hosts.
+
+**Deliverable:** Structured metrics output appended to each investigation report:
+```json
+{
+  "metrics": {
+    "phases": {
+      "disk_agent": {"tool_calls": 15, "elapsed_s": 94, "claims": 8},
+      "memory_agent": {"tool_calls": 20, "elapsed_s": 88, "claims": 5},
+      "verifier": {"tool_calls_total": 52, "claims_verified": 13, "elapsed_s": 45},
+      "cross_verifier": {"tool_calls_total": 24, "claims_corroborated": 8, "elapsed_s": 38}
     },
+    "total_tool_calls": 111,
+    "estimated_cost_usd": 13.80,
+    "token_counts": {"input": 284000, "output": 18400}
+  }
 }
 ```
 
-Pass `tools=[_RECORD_FINDING_TOOL]` and `tool_choice={"type": "any"}` in the synthesis
-call. Collect tool_use blocks from the response; each is one `LayerClaim`. The model
-cannot return prose — it must call the tool. Apply identical fix to
-`memory_agent.investigate_layered()`.
+**Also:** Add cost ceiling check. If `estimated_cost_usd > TARGET_MAX_COST_USD (20.0)`,
+log a warning before Phase 3 starts. Operator can abort Phase 3 to stay under budget.
 
-**Step 2 — Set budget caps before implementing Phase 2:**
+---
 
-In `disk_agent.py`: `MAX_ROUNDS=5, TOOLS_PER_ROUND=3` (15 calls) — keep as-is.
-In `memory_agent.investigate_layered()`: `MAX_CALLS=20` — keep as-is.
-Phase 2 verifier (to be built in `verifier.py`): `MAX_VERIFY_ROUNDS=2, TOOLS_PER_VERIFY=2`
-(4 calls per claim). With ~10 claims per host: 40 calls. This is the hard cap.
-Phase 3 cross-layer (existing `cross_verifier.py`, renamed): runs only on Phase 2
-CONFIRMED claims. Same 4-call cap per claim.
-Target: Phase 1 + Phase 2 + Phase 3 ≤ 100 total tool calls per host, ≤ $20.
+### Sprint 6 — INCONCLUSIVE feedback loop
 
-**Step 3 — Build `verifier.py` with `verify_same_layer()`:**
+**Whitepaper gap:** "Evaluate against a benchmark suite, diagnose failures by clustering
+root causes, optimize the prompts or tools that caused them, verify fixes against a regression
+suite, and monitor production traffic for new failure modes. Each cycle compounds."
+INCONCLUSIVE in VERITAS is currently a dead end — it enters the report and nothing happens.
+The rocba T1055 Round 2 recovery (after Round 1 timeout) proves recovery works. Make it systematic.
 
-New file `custom-agent/verifier.py`. One class `Verifier`, one public method:
+**Two cases to handle:**
+1. **Budget exhausted before verdict** — verifier used all 4 calls without concluding.
+   Recovery: widen artifact hint, retry once with 2 additional calls targeting the specific
+   artifact mentioned in the original `artifact_hint`.
+2. **malfind / heavy plugin timeout** — the `120s` subprocess timeout fires mid-execution.
+   Recovery: retry with direct PID-targeted invocation (`windows.malfind --pid <pid>`)
+   rather than full-image scan.
 
-```python
-async def verify_same_layer(
-    claims: list[LayerClaim],
-    target_path: str,
-    memory_path: str | None,
-) -> list[SameLayerVerdict]:
-```
+**Implementation:** `verifier.py` — if `verdict == 'INCONCLUSIVE'` and `calls_used < MAX_VERIFY_CALLS`:
+retry with narrowed search. If `calls_used == MAX_VERIFY_CALLS`: INCONCLUSIVE is final,
+log `exhausted_budget` reason. If timeout detected in citation: retry with pid-targeted command.
 
-For each claim, spawn `sift_server.py` with `VERITAS_LAYER=claim['source_layer']`
-(same layer as the claim). The agent receives `technique_id`, `technique_name`,
-`tool_output`, `artifact_hint` — nothing else. Must run its own tool calls and return
-`CONFIRMED | REFUTED | INCONCLUSIVE`. All verifications run concurrently via
-`asyncio.gather`. Add `SameLayerVerdict` TypedDict to `contracts.py`.
+---
 
-**Step 4 — Update `investigate.py run_cross_layer()`:**
+## Key invariants to preserve across all sprints
 
-Wire Phase 2 before Phase 3:
-```
-disk_claims, memory_claims = await Phase 1 (parallel)
-same_layer_verdicts = await verifier.verify_same_layer(disk_claims + memory_claims, ...)
-confirmed_claims = [c for c, v in zip(...) if v['verdict'] == 'CONFIRMED']
-cross_verdicts = await cross_verifier.verify_cross_layer(confirmed_claims, ...)  # optional
-results = adjudicate(same_layer_verdicts, cross_verdicts)
-```
+1. **Information boundary is structural, not prompt-based.** `_build_verifier_message()` in
+   `verifier.py` is the only place the handoff is constructed. Reasoning never crosses.
+   If someone needs to add context to the verifier, they touch this function explicitly.
 
-**Step 5 — Update `contracts.py`:**
+2. **INCONCLUSIVE ≠ REFUTED.** Timeout, budget exhaustion, and insufficient tool output
+   all return INCONCLUSIVE. Only contradicting evidence returns REFUTED. This is the
+   "fails safe" property. Do not weaken it for convenience.
 
-Add `SameLayerVerdict`:
-```python
-class SameLayerVerdict(TypedDict):
-    technique_id: str
-    source_layer: str       # "disk" | "memory"
-    verdict: str            # "CONFIRMED" | "REFUTED" | "INCONCLUSIVE"
-    citation: str | None    # what the verifier found
-```
+3. **Phase 3 never runs on Phase 2 non-CONFIRMEDs.** Cross-layer corroboration only
+   runs on what same-layer verification confirmed. A Phase 3 CONTRADICTED cannot rescue
+   a Phase 2 REFUTED — this is enforced in `adjudicate()._final()`.
 
-Update `FinalTechniqueResult.final` to be driven by `SameLayerVerdict.verdict` first,
-then annotated by `CrossVerdict.verdict`. Current code drives `final` from cross-verdict
-directly — this is wrong.
+4. **`VERITAS_LAYER` enforcement is at the subprocess level.** The binary allowlist in
+   `sift_server.py` reads the env var on import. Structural rejection before `subprocess.run()`.
+   This must not be moved to a prompt instruction.
 
-## Open questions / blockers
+5. **Branch discipline.** `future/cross-layer-verification` only. Do NOT merge to `main`
+   until Sprint 2 eval harness exists and passes on nfury ground truth.
 
-- **`record_finding` tool placement**: Defined inline in `disk_agent.py` and
-  `memory_agent.py` as a local constant. NOT in `sift_server.py` — it's a reporting
-  primitive, not a forensic tool. The synthesis turn does not connect to the MCP server
-  (uses `tools=[]` currently). Inline definition is correct.
+---
 
-- **Phase 3 opt-in vs. always-run**: Currently `run_cross_layer()` runs cross-layer
-  verification unconditionally. Should Phase 3 be a `--corroborate` flag to control cost?
-  Not decided. Default to always-run for now, add flag if cost proves excessive in testing.
+## Research context
 
-- **`cross_verifier.py` rename**: Should be renamed `cross_layer.py` or folded into
-  `verifier.py` as a second method. The class name `CrossVerifier` is accurate; the
-  filename is the ambiguity. Defer rename until after `verifier.py` is built to avoid
-  confusion during the sprint.
+**The epistemic through-line** (canonical: `/home/username/research/epistemic-through-line.md`):
+VERITAS blinded replication and CATT-CCS constraint inflation are the same argument.
+"A verification result is only as independent as the information boundary between the
+investigator and the verifier." Cite this in the CVSS-for-AI paper introduction.
 
-- **`adjudicate()` in `cross_verifier.py`**: Currently takes `(disk_claims,
-  memory_claims, disk_verdicts, memory_verdicts)` — four arguments. After the sprint
-  it takes `(same_layer_verdicts, cross_verdicts)` — two arguments. The function
-  signature must change. The current implementation will be replaced.
-
-## Relevant context
-
-- **The through-line**: Same-layer blind replication in VERITAS is structurally identical
-  to the constraint inflation argument in the CATT-CCS 2027 paper. "The verifier shared
-  reasoning with the investigator" invalidates the claim in VERITAS. "The evaluator shared
-  information with the attacker" inflates the metric in NIDS evaluation. Same argument,
-  two domains. Write this down somewhere permanent.
-
-- **VERITAS is Career rail, not Research rail**. The CCS 2027 paper on constraint
-  inflation in NIDS is the publication anchor. Do not let VERITAS architecture work eat
-  that clock. VERITAS feeds the Research rail only as infrastructure.
-
-- **Branch discipline**: `future/cross-layer-verification` only. Do NOT merge to `main`
-  until Phase 2 same-layer verification is implemented and tested on nfury data.
-
-- **`sift_server.py` layer enforcement**: `VERITAS_LAYER` env var is set on
-  `StdioServerParameters.env` when spawning the MCP server subprocess. It is NOT a CLI
-  arg (FastMCP may not handle extra args cleanly). The env var reads on import via
-  `_LAYER = os.environ.get('VERITAS_LAYER', 'all')`. The binary allowlist used in
-  `_validate_command()` calls `_effective_allowlist()` which returns `_DISK_BINARIES`,
-  `_MEMORY_BINARIES`, or `_ALLOWED_BINARIES` depending on `_LAYER`. Structural rejection
-  happens before any `subprocess.run()`.
-
-- **`disk_agent.py` investigation budget**: `MAX_ROUNDS=5, TOOLS_PER_ROUND=3`. The loop
-  checks `tool_count < MAX_ROUNDS * TOOLS_PER_ROUND` (15). This is Phase 1 budget.
-  Phase 2 verifier budget is separate: `MAX_VERIFY_ROUNDS=2, TOOLS_PER_VERIFY=2` (4
-  calls per claim). These must not be conflated.
-
-- **nfury test data**: Mounted disk at `/mnt/nfury`, memory image at case directory
-  discovered via `_discover_case()`. SIFT workstation at `192.168.1.71` (may be offline —
-  check with `ping 192.168.1.71` before testing). nfury has 15 confirmed techniques in
-  the existing `reports/nfury-auditor-transcript.json` — use this as ground truth for
-  Phase 2 output validation.
+**VERITAS is Career rail, not Research rail.** The CCS 2027 paper on constraint inflation
+in NIDS is the publication anchor. Do not let VERITAS architecture work eat that clock.
+VERITAS feeds the Research rail only as infrastructure for the through-line argument.

@@ -16,41 +16,34 @@ Two agents. Zero shared state. One rule: `CONFIRMED` requires a positive tool re
 *Layered security architecture — adversarial training signal through output management.*
 
 ```
-Mounted Disk Image (read-only)
-        |
-        v
-+---------------------------+
-|    Deterministic Sweep    |  ~25 SIFT commands, no LLM, <60s
-|    (fast_triage.py)       |  corpus-calibrated signal weights
-+---------------------------+
-        |
-        v
-+---------------------------+
-|    Triage Agent           |  75-call Claude budget
-|    "The Optimist"         |  reads raw artifacts only — no scores, no labels
-|    (blue_agent.py)        |
+Mounted Disk Image (read-only)      Raw Memory Image (.001 / .raw)
+        |                                     |
+        v                                     v
 +---------------------------+     +---------------------------+
-        |                         |  Memory Analysis          |
-        |                         |  Volatility 3 (parallel)  |
-        |                         |  (memory_agent.py)        |
-        |                         +---------------------------+
-        |  findings list only          |
-        |  (technique IDs, nothing else)|
-        +------------------------------+
-        v
-+---------------------------+
-|    Forensic Auditor       |  isolated MCP session, no shared state
-|    "The Cynic"            |  mandate: assume every finding is false
-|    (auditor_agent.py)     |  5 rounds x 2 tool calls per technique
-+---------------------------+
-        |
-        v
-  CONFIRMED / REFUTED / INCONCLUSIVE
-  + append-only audit log (audit_log.jsonl)
-  + HTML report
+|    Disk Agent             |     |    Memory Agent           |
+|    (blue_agent.py)        |     |    (memory_agent.py)      |
+|    Pass 1: ~25 SIFT cmds  |     |    Volatility 3 plugins   |
+|    Pass 2: 75-call loop   |     |    Pass 2: agentic loop   |
+|    corpus-calibrated       |     |    VAD / injection / creds|
++---------------------------+     +---------------------------+
+        |                                     |
+        |  findings list only (technique IDs, nothing else)
+        +------------------------------+------+
+                                       v
+                        +---------------------------+
+                        |    Forensic Auditor       |  isolated MCP session
+                        |    (auditor_agent.py)     |  no shared state
+                        |                           |  mandate: assume false
+                        |                           |  5 rounds × 2 tool calls
+                        +---------------------------+
+                                       |
+                                       v
+                          CONFIRMED / REFUTED / INCONCLUSIVE
+                          + append-only audit log (audit_log.jsonl)
+                          + HTML report
 ```
 
-**The structural guarantee:** The Auditor receives technique IDs and nothing else from the Triage Agent's session. `CONFIRMED` requires a positive tool return value. Timeout returns `INCONCLUSIVE` — never `CONFIRMED`.
+**The structural guarantee:** The Auditor receives technique IDs and nothing else from the Disk and Memory Agent sessions. `CONFIRMED` requires a positive tool return value. Timeout returns `INCONCLUSIVE` — never `CONFIRMED`.
 
 ---
 
@@ -58,7 +51,7 @@ Mounted Disk Image (read-only)
 
 **Custom MCP Server + Multi-Agent Framework**
 
-A purpose-built MCP server exposes typed forensic functions rather than a generic shell. Two Claude agents run in completely separate MCP sessions with zero shared state. The Triage Agent proposes findings. The Forensic Auditor independently re-runs tool calls to verify. A `CONFIRMED` verdict requires a positive tool return — not model confidence. The agents physically cannot run destructive commands because the MCP server does not expose them.
+A purpose-built MCP server exposes typed forensic functions rather than a generic shell. Three Claude agents run in completely separate MCP sessions with zero shared state. The Disk Agent and Memory Agent investigate on disjoint evidentiary layers. The Forensic Auditor independently re-runs tool calls to verify every finding. A `CONFIRMED` verdict requires a positive tool return — not model confidence. The agents physically cannot run destructive commands because the MCP server does not expose them.
 
 ---
 
@@ -100,10 +93,10 @@ The Forensic Auditor receives:
 - A JSON list of technique IDs
 
 The Forensic Auditor does **not** receive:
-- The Triage Agent's tool call history
-- The Triage Agent's reasoning or analysis
+- The Disk Agent's or Memory Agent's tool call history
+- Either agent's reasoning or analysis
 - Confidence scores or weights
-- Any context from the Triage Agent's MCP session
+- Any context from either investigation session
 
 This is enforced by the code, not a prompt. Reading `auditor_agent.py` verifies the property.
 
@@ -128,9 +121,9 @@ The triage layer generates candidates for the Auditor. It is not the architectur
 
 | Component | What it does | Status |
 |-----------|-------------|--------|
-| `fast_triage.py` | ~25 SIFT commands, corpus-calibrated weights, <10s, no API key | POC |
+| `blue_agent.py` Pass 1 | ~25 SIFT commands, corpus-calibrated weights, <60s | Working |
 | `blue_agent.py` Pass 2 | 75-call Claude loop, raw artifacts only, no labels | Working |
-| `memory_agent.py` | Volatility 3 parallel path | Working |
+| `memory_agent.py` | Volatility 3 parallel path — process injection, VAD, creds | Working |
 | Corpus weights | Log-odds from 800+ MalwareBazaar/HybridAnalysis samples | POC, 9 MITRE techniques |
 
 The roadmap replaces corpus weights with a neural network trained against a validated benign baseline. The Auditor architecture is unchanged — any detection signal feeds the same verification layer.

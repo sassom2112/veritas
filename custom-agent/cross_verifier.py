@@ -35,7 +35,7 @@ from datetime import datetime, timezone
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from contracts import CrossVerdict, FinalTechniqueResult, LayerClaim
+from contracts import CrossVerdict, FinalTechniqueResult, LayerClaim, SameLayerVerdict
 
 logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('mcp').setLevel(logging.WARNING)
@@ -323,23 +323,27 @@ class CrossVerifier:
 
 
 def adjudicate(
+    same_layer_verdicts: list[SameLayerVerdict],
     disk_claims: list[LayerClaim],
     memory_claims: list[LayerClaim],
     disk_verdicts: list[CrossVerdict],
     memory_verdicts: list[CrossVerdict],
 ) -> list[FinalTechniqueResult]:
     """
-    Map per-layer claims + cross-verdicts to a final result per technique.
+    Map same-layer verdicts + cross-verdicts to a final result per technique.
 
-    Deduplication: if the same technique appears in both layers, the higher-
-    confidence result wins (CONFIRMED > SINGLE_SOURCE > DISPUTED > REFUTED).
+    same_layer_verdict drives final; cross_verdict is annotation only.
+    A Phase 3 CONTRADICTED cannot rescue a Phase 2 REFUTED.
+    A Phase 3 CORROBORATED upgrades Phase 2 CONFIRMED → HIGH_CONFIRMED.
     """
-    verdict_map: dict[str, CrossVerdict] = {}
+    same_map: dict[str, SameLayerVerdict] = {v['technique_id']: v for v in same_layer_verdicts}
+
+    cross_map: dict[str, CrossVerdict] = {}
     for v in disk_verdicts + memory_verdicts:
         tid = v['technique_id']
-        existing = verdict_map.get(tid)
-        if existing is None or _verdict_rank(v['verdict']) > _verdict_rank(existing['verdict']):
-            verdict_map[tid] = v
+        existing = cross_map.get(tid)
+        if existing is None or _cross_rank(v['verdict']) > _cross_rank(existing['verdict']):
+            cross_map[tid] = v
 
     claim_map: dict[str, LayerClaim] = {}
     for c in disk_claims + memory_claims:
@@ -349,29 +353,38 @@ def adjudicate(
 
     results: list[FinalTechniqueResult] = []
     for tid, claim in claim_map.items():
-        cv = verdict_map.get(tid)
-        cross = cv['verdict'] if cv else 'NO_VISIBILITY'
+        sv = same_map.get(tid)
+        cv = cross_map.get(tid)
+        same_v  = sv['verdict'] if sv else 'INCONCLUSIVE'
+        cross_v = cv['verdict'] if cv else 'NO_VISIBILITY'
         results.append(FinalTechniqueResult(
             technique_id=tid,
             technique_name=claim['technique_name'],
             source_layer=claim['source_layer'],
-            cross_verdict=cross,
-            final=_final_from_cross(cross),
-            citation=cv['citation'] if cv else None,
+            same_verdict=same_v,
+            cross_verdict=cross_v,
+            final=_final(same_v, cross_v),
+            citation=cv['citation'] if cv else (sv['citation'] if sv else None),
         ))
 
-    _rank = {'CONFIRMED': 3, 'SINGLE_SOURCE': 2, 'DISPUTED': 1, 'REFUTED': 0}
+    _rank = {'HIGH_CONFIRMED': 4, 'CONFIRMED': 3, 'DISPUTED': 2, 'REFUTED': 1, 'INCONCLUSIVE': 0}
     results.sort(key=lambda r: _rank.get(r['final'], 0), reverse=True)
     return results
 
 
-def _verdict_rank(v: str) -> int:
+def _cross_rank(v: str) -> int:
     return {'CORROBORATED': 2, 'NO_VISIBILITY': 1, 'CONTRADICTED': 0}.get(v, 0)
 
 
-def _final_from_cross(cross_verdict: str) -> str:
+def _final(same_verdict: str, cross_verdict: str) -> str:
+    """Same-layer drives final; cross-layer annotates CONFIRMED only."""
+    if same_verdict == 'REFUTED':
+        return 'REFUTED'
+    if same_verdict == 'INCONCLUSIVE':
+        return 'INCONCLUSIVE'
+    # same_verdict == 'CONFIRMED'
     return {
-        'CORROBORATED':  'CONFIRMED',
-        'NO_VISIBILITY': 'SINGLE_SOURCE',
+        'CORROBORATED':  'HIGH_CONFIRMED',
+        'NO_VISIBILITY': 'CONFIRMED',
         'CONTRADICTED':  'DISPUTED',
-    }.get(cross_verdict, 'SINGLE_SOURCE')
+    }.get(cross_verdict, 'CONFIRMED')
