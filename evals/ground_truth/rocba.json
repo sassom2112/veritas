@@ -1,0 +1,35 @@
+{
+  "host": "rocba",
+  "source_report": "reports/rocba-auditor-transcript.json",
+  "expected": {
+    "audited_count": 5,
+    "confirmed_count": 1,
+    "refuted_count": 4,
+    "inconclusive_count": 0,
+    "confirmed": ["T1055"],
+    "refuted": ["T1071.001", "T1134", "T1547.001", "T1574"],
+    "inconclusive": []
+  },
+  "trajectory_checks": [
+    {
+      "technique_id": "T1055",
+      "description": "Process injection in MsMpEng.exe must call Volatility memory analysis across multiple rounds",
+      "required_any": ["malfind", "run_volatility", "vadinfo", "MsMpEng"]
+    },
+    {
+      "technique_id": "T1071.001",
+      "description": "C2 connection refutation must check active network connections via netscan",
+      "required_any": ["netscan", "windows.netscan", "netstat"]
+    },
+    {
+      "technique_id": "T1547.001",
+      "description": "Run key persistence refutation must check registry hives for absence of run keys",
+      "required_any": ["NTUSER.DAT", "SOFTWARE", "SOFTWARE\\\\Microsoft", "printkey"]
+    },
+    {
+      "technique_id": "T1574",
+      "description": "Hijack execution flow refutation must check DLL search paths",
+      "required_any": ["dll", ".dll", "version.dll", "dlllist"]
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "host": "nfury",
+  "source_report": "reports/nfury-auditor-transcript.json",
+  "expected": {
+    "audited_count": 19,
+    "confirmed_count": 15,
+    "refuted_count": 4,
+    "inconclusive_count": 0,
+    "confirmed": [
+      "T1003.002", "T1005", "T1036", "T1036.005", "T1055",
+      "T1071", "T1078", "T1098", "T1105", "T1136",
+      "T1140", "T1547", "T1560.001", "T1564", "T1569.002"
+    ],
+    "refuted": ["T1071.001", "T1134", "T1547.001", "T1574"],
+    "inconclusive": []
+  },
+  "trajectory_checks": [
+    {
+      "technique_id": "T1055",
+      "description": "Process injection must invoke Volatility memory analysis",
+      "required_any": ["malfind", "run_volatility", "vadinfo", "vadwalk"]
+    },
+    {
+      "technique_id": "T1569.002",
+      "description": "PsExec must search for psexesvc.exe on disk",
+      "required_any": ["PSEXESVC", "psexesvc", "psexec"]
+    },
+    {
+      "technique_id": "T1071.001",
+      "description": "C2 web traffic refutation must check network connections",
+      "required_any": ["netscan", "netstat", "windows.netscan"]
+    },
+    {
+      "technique_id": "T1003.002",
+      "description": "SAM credential dump must check hive files or hashdump",
+      "required_any": ["SAM", "hashdump", "SYSTEM", "SECURITY"]
+    },
+    {
+      "technique_id": "T1547.001",
+      "description": "Run key persistence must check registry hives",
+      "required_any": ["NTUSER.DAT", "SOFTWARE", "CurrentVersion\\\\Run", "printkey"]
+    }
+  ]
+}
