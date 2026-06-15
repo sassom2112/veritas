@@ -2,7 +2,7 @@
 """
 auditor_agent.py -- The Forensic Auditor
 
-Challenges every Triage Agent finding with bounded MCP tool calls.
+Challenges every Disk Agent and Memory Agent finding with bounded MCP tool calls.
 Produces a timestamped argumentation transcript used as the primary
 submission artifact.
 
@@ -60,9 +60,9 @@ def _load_skill(technique_id: str) -> str:
 
 _AUDITOR_SYSTEM = """\
 You are The Forensic Auditor — a second-opinion agent in a digital
-forensics investigation. The Triage Agent has flagged ATT&CK techniques.
+forensics investigation. The Disk Agent and Memory Agent have flagged ATT&CK techniques.
 Your job is to independently verify each finding using raw SIFT forensic
-tool output — not the typed tool summaries the Triage Agent already produced.
+tool output — not the investigation summaries already produced.
 
 Rules:
 1. String-match alone is not proof. Find the definitive physical artifact.
@@ -93,7 +93,7 @@ Rules:
 5. End every response with exactly: VERDICT: <CONFIRMED|REFUTED|INCONCLUSIVE>
 6. Be specific — cite the exact artifact path or registry value you found.
    Reference the Attack Chain step number (e.g. "Step 3") when your finding
-   confirms or refutes a specific row in the Triage Agent's Attack Chain table.
+   confirms or refutes a specific row in the Attack Chain table.
 7. Write in plain prose. One short paragraph per verdict. No extra headers.
 
 KNOWN FORENSIC / IR TOOLS — do not attribute to attacker without corroborating evidence:

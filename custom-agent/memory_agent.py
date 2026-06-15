@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-memory_agent.py -- Memory Triage Agent
+memory_agent.py -- Memory Agent
 
 Volatility 3 based memory analysis — mirrors blue_agent.py two-pass structure.
   Pass 1: ~14 deterministic vol.py plugin runs scored against MEMORY_PATTERNS
@@ -667,7 +667,7 @@ async def investigate_layered(
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(
-        description='Memory Triage Agent — Volatility 3 two-pass analysis'
+        description='Memory Agent — Volatility 3 two-pass analysis'
     )
     parser.add_argument('memory_path', help='Path to raw memory image')
     parser.add_argument('--host', required=True,

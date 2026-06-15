@@ -2,7 +2,7 @@
 """
 investigate.py -- VERITAS Investigation Orchestrator
 
-Sequences: Triage Agent -> Forensic Auditor -> Unified Report
+Sequences: Disk Agent + Memory Agent -> Forensic Auditor -> Unified Report
 Both phases always run. The Auditor is not optional.
 
 Usage — case directory (auto-discovers disk mount + memory):
@@ -298,7 +298,7 @@ async def run_investigation(target_path: str,
     print(f"  Started:    {started.strftime('%Y-%m-%dT%H:%M:%SZ')}")
     print(f"{'═'*60}")
 
-    # ── Phase 1: Triage Agent (disk) + Memory Agent — parallel ────────────
+    # ── Phase 1: Disk Agent + Memory Agent — parallel ─────────────────────
     rules = blue_agent.load_operational_rules()
 
     if memory_path:

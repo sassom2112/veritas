@@ -15,7 +15,7 @@ class TriageHandoff(TypedDict):
 
     The Auditor receives technique IDs, their source layer, the raw signals
     that fired, and a log of Pass 2 tool calls it can use to seed verification.
-    It does NOT receive scores, labels, or the triage agent's reasoning.
+    It does NOT receive scores, labels, or the investigating agents' reasoning.
     """
     techniques_detected: list[str]         # MITRE IDs, e.g. ["T1134", "T1055"]
     technique_sources: dict[str, str]      # "disk" | "memory" | "disk+memory"

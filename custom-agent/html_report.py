@@ -582,7 +582,7 @@ def generate_report(host: str, reports_dir: str) -> str:
       <span>{_esc(ts)}</span>
       <span>Elapsed: {elapsed:.0f}s</span>
       <span>Pass 2: {pass2_calls} tool calls</span>
-      <span>Triage Agent → Forensic Auditor</span>
+      <span>Disk Agent + Memory Agent → Forensic Auditor</span>
     </div>
   </header>
 

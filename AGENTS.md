@@ -161,9 +161,9 @@ for synthesis turns. Routing change is safe if Sprint 2 output eval passes after
 - **Do not start `sift_server.py` manually.** It spawns as an MCP subprocess via
   `StdioServerParameters`. A manual terminal instance creates a second server that breaks
   tool routing.
-- **Do not use "Cynic" or "Optimist".** Deprecated names from before `2eeb98b`. Current
-  names: Disk Agent, Memory Agent, Auditor, Verifier.
-- **Do not run `fast_triage.py`.** Deprecated path. Entry point is
+- **Do not use the old role names** (deprecated before commit `2eeb98b`). Current
+  names: Disk Agent, Memory Agent, Forensic Auditor, Verifier.
+- **Do not run the deprecated triage script.** Entry point is
   `investigate.py --case <path>`.
 - **Do not add enforcement rules to this file.** Point to the enforcement location in the
   table above. Duplicate rules here will silently diverge from code and mislead future agents.

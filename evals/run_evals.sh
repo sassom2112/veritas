@@ -46,6 +46,14 @@ for gt in evals/ground_truth/*.json; do
 done
 
 echo ""
+echo "-- Submission verification (narrative + components) --"
+if python3 evals/verify_submission.py; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+fi
+
+echo ""
 echo "Results: ${PASS} passed, ${FAIL} failed"
 echo ""
 
