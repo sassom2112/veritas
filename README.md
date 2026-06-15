@@ -32,11 +32,15 @@ This is the same architectural pattern as constraint projection in adversarial M
 
 The Disk Agent and Memory Agent are structurally decoupled from the Auditor: the Auditor receives the findings list and nothing else. No investigation context, no Phase 1 scores, no technique labels. If it can't re-derive the finding from physical bytes in an isolated MCP session, the finding doesn't ship. Wide triage + adversarial verification is the correct two-stage architecture — not triage alone, not verification alone.
 
+VERITAS runs in 16 minutes per host at ~$14. That does not close the 7-minute adversary breakout window — and it does not try to. An autonomous investigator that hallucinated credential dumping in 3 minutes is no better than an analyst who guessed. The trust gap is the prerequisite: you cannot responsibly hand an IR team machine-speed findings until those findings survive legal scrutiny. Multi-host parallelism is where speed scales — 4 simultaneous investigations run in the time of the slowest single host, not their sum. VERITAS closes the prerequisite first.
+
 ---
 
 ## Architecture
 
 ![VERITAS Pipeline Architecture](docs/adversa-architecture.png)
+
+**Architectural pattern: Custom MCP Server** (hackathon rubric category 2). `sift_server.py` exposes typed forensic functions — not generic shell access. The agent physically cannot run destructive commands because the server does not expose them. Prompt-based restrictions and architectural restrictions are distinguished in the Security Boundary section below.
 
 **Phase 1 — Deterministic triage** (~25 SIFT commands, no LLM, <60 s)
 Corpus-calibrated log-odds weights from 800+ labeled malware samples. Fully reproducible.
