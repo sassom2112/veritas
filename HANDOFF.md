@@ -2,111 +2,143 @@
 
 ## Current task
 
-Three sprints complete and committed. Discussing Sprint 4 (model routing) next — reduce per-host
-cost from ~$14 to ~$8 by routing synthesis turns to claude-haiku-4-5-20251001.
+All six sprint backlog items are committed and green on `future/cross-layer-verification`.
+The immediate next action is the hackathon demo video — deadline June 15, 2026 (tomorrow).
 
 ---
 
-## What was built this session (all committed, branch clean)
+## What's been tried
+
+All six sprints completed this session. Every commit is clean and `bash evals/run_evals.sh`
+returns 4/4 pass + 2 conditional skips (metrics, waiting on pipeline run).
 
 | Commit | Sprint | What |
 |---|---|---|
-| `82ea667` | Sprint 1 | AGENTS.md + verifier.py + contracts.py + cross_verifier.py + investigate.py + doc pass |
-| `2297417` | Sprint 2 | evals/eval_output.py + eval_trajectory.py + ground_truth/nfury.json + rocba.json + run_evals.sh |
-| `38b847e` | Sprint 3 | skills/ (10 technique playbooks) + _load_skill() wired into auditor_agent._challenge_round() |
-
-**Smoke test results (run_evals.sh):**
-- PASS [nfury] output eval — 15 confirmed, 4 refuted, 0 inconclusive
-- PASS [rocba] output eval — 1 confirmed, 4 refuted, 0 inconclusive
-- PASS [nfury] trajectory eval — 5 checks
-- PASS [rocba] trajectory eval — 4 checks
-- All Python files compile clean (py_compile on 7 files)
+| `82ea667` | Sprint 1 | `AGENTS.md` (148-line harness contract) + `verifier.py` (Phase 2 same-layer blind replication) + `contracts.py` (`SameLayerVerdict`, updated `FinalTechniqueResult`) + `cross_verifier.py` (same_verdict primary gate) + `investigate.py` (4-phase orchestration) + doc consistency pass |
+| `2297417` | Sprint 2 | `evals/` — output eval, trajectory eval, ground truth for nfury/rocba, `run_evals.sh` regression gate |
+| `38b847e` | Sprint 3 | `skills/` — 10 per-technique playbooks; `_load_skill()` wired into `auditor_agent._challenge_round()` |
+| `3d4ef6c` | Sprint 4 | Model routing in `verifier.py` — `_INVESTIGATION_MODEL` (sonnet) vs `_SYNTHESIS_MODEL` (haiku) for `record_verdict` forced call; fixed latent Python 3.8 `str | None` bug with `from __future__ import annotations` |
+| `9670944` | Sprint 5 | `metrics.py` (`Metrics` class, pricing dict, phase timing); `contracts.py` (`PhaseTelemetry`, `HostAuditManifest`); metrics wired into `verifier.py`, `cross_verifier.py`, `investigate.py`; cost gate before Phase 3 (`TARGET_MAX_COST_USD = 20.0`); audit manifest written to `reports/{host}-audit-manifest.json`; `evals/eval_metrics.py` + conditional check in `run_evals.sh` |
+| `80bde74` | Sprint 6 | INCONCLUSIVE feedback loop in `verifier._verify_one()` — `MAX_RETRY_CALLS = 2`, `_TIMEOUT_SIGNALS` tuple, `all_tool_outputs` accumulator, retry block between main while loop and forced verdict; timeout path → PID-targeted retry hint; budget-exhaustion path → narrowed artifact hint; retry calls tagged `phase_2_verify_retry` in metrics |
 
 ---
 
 ## Exact next step
 
-**Sprint 4 — Model routing:**
+### IMMEDIATE — Hackathon demo video (June 15, 2026 deadline)
 
-Two env vars, two files. Both need the same change pattern:
+The hackathon submission runs off **`main` branch** (3-phase pipeline, stable). Do NOT demo
+from `future/cross-layer-verification`.
 
-**`custom-agent/auditor_agent.py`:**
-- Line `model=os.environ.get('VERITAS_MODEL', 'claude-sonnet-4-6')` is used in `_challenge_round()` at the `self.client.messages.create(...)` call (line ~490)
-- Synthesis turns are where the model has tool results in hand and just needs to emit a text verdict. In the Auditor, every call is investigation reasoning — no synthesis-only turn exists. Keep `VERITAS_MODEL` here.
+```bash
+# 1. Confirm SIFT workstation is online
+ping 192.168.1.71
 
-**`custom-agent/verifier.py`:**
-- `_verify_one()` makes two distinct call types:
-  1. Investigation turns (tool_choice='any', forces a tool call) — keep `VERITAS_MODEL`
-  2. The final forced `record_verdict` call — this is a synthesis turn, use `VERITAS_SYNTHESIS_MODEL`
-- Locate the `messages.create(...)` call in `_verify_one()`. The synthesis turn is identified by `tool_choice={'type': 'any'}` on the `_RECORD_VERDICT_TOOL` call — it already forces the tool call, so haiku is sufficient
-- Add: `_SYNTHESIS_MODEL = os.environ.get('VERITAS_SYNTHESIS_MODEL', 'claude-haiku-4-5-20251001')`
-- Add: `_INVESTIGATION_MODEL = os.environ.get('VERITAS_MODEL', 'claude-sonnet-4-6')`
-- Use `_SYNTHESIS_MODEL` for the `record_verdict` forced call, `_INVESTIGATION_MODEL` for tool-use investigation turns
+# 2. Switch to main for the demo
+git checkout main
 
-**`custom-agent/blue_agent.py` and `memory_agent.py`:**
-- Both have synthesis turns: the `record_finding` forced tool call after investigation
-- Same pattern: `_SYNTHESIS_MODEL` for that single forced call, `_INVESTIGATION_MODEL` for all investigation turns
-- Grep for `record_finding` in both files to find the synthesis call site
+# 3. Confirm nfury case is mounted
+ls /mnt/nfury/Windows/System32/
 
-After Sprint 4: run `bash evals/run_evals.sh` to confirm output eval still passes — if routing to haiku didn't change verdicts, the 4/4 pass is the green light.
+# 4. Run the full pipeline (live on camera)
+python3 custom-agent/investigate.py --case /cases/nfury
+
+# 5. Open the HTML report for the payoff shot
+open reports/nfury-report.html   # or xdg-open on Linux
+```
+
+Demo script (5 min, audio narration):
+1. (0:00–0:30) Show the problem: LLMs hallucinate forensic findings. One command.
+2. (0:30–1:30) Show Phase 1+2 running — terminal output, tool calls, triage flags
+3. (1:30–3:00) Show the Auditor challenging each finding — CONFIRMED vs REFUTED live
+4. (3:00–4:00) Show the HTML report — 15 confirmed, 4 refuted, every finding cited to artifact
+5. (4:00–5:00) Show the 4-refutal pattern — T1071.001 memory noise dismissed, explain why
+
+Devpost submission needs 8 fields — check hackathon page for exact requirements.
+
+### AFTER DEMO — Architecture doc rewrite (before merge to main)
+
+`README.md`, `architecture.md`, `the-game.md`, `index.md`, `SUBMISSION.md` all describe
+the 3-phase main-branch pipeline. The cross-layer branch is a 4-phase pipeline:
+
+```
+Phase 1: Disk Agent + Memory Agent (parallel, disjoint tool grants)
+Phase 2: Same-layer Verifier (PRIMARY GATE — blind replication, structural info boundary)
+Phase 3: Cross-layer Corroborator (bonus, CONFIRMED claims only)
+Phase 4: Adjudication (same_verdict drives final, cross_verdict annotates)
+```
+
+Every doc that says "Disk Agent + Memory Agent → Auditor" needs to become this 4-phase
+description. The "Two Players / Three Players" framing in `the-game.md` needs to become
+a "Four Phases" framing. This is a significant rewrite — do not merge to main until it is done.
 
 ---
 
 ## Open questions / blockers
 
-- **Architecture docs are wrong on this branch:** `README.md`, `architecture.md`, `the-game.md`,
-  `index.md`, `SUBMISSION.md` all describe the 3-phase main branch pipeline (Disk + Memory → Auditor).
-  The cross-layer branch has a 4-phase pipeline (Disk + Memory → Same-layer Verifier [PRIMARY GATE]
-  → Cross-layer Corroborator → adjudicate). These need complete rewrites before this branch
-  merges to main. Sprints 4-6 first, then doc rewrite.
+- **Phase 1 token tracking is zero.** `metrics.start_phase('phase_1_disk')` and
+  `metrics.start_phase('phase_1_memory')` record wall-clock timing but 0 token counts
+  because `blue_agent.py` and `memory_agent.py` are not wired to the `Metrics` instance.
+  The cost gate only reflects Phase 2+3 spend. Correct conservative behavior — but
+  `{host}-audit-manifest.json` will show `phase_1_disk.input_tokens: 0`. Follow-on work:
+  add optional `metrics` param to `DiskAgent.investigate()` and `mem_investigate_layered()`.
 
-- **Missing ground truth:** No `reports/tdungan-auditor-transcript.json` or
-  `reports/nromanoff-auditor-transcript.json` in the repo. Add
-  `evals/ground_truth/tdungan.json` and `nromanoff.json` once those pipeline runs are saved.
-  `run_evals.sh` picks them up automatically.
+- **Missing ground truth for tdungan and nromanoff.** No `reports/tdungan-auditor-transcript.json`
+  or `reports/nromanoff-auditor-transcript.json` in the repo. Once pipeline runs for those
+  hosts are saved, add `evals/ground_truth/tdungan.json` and `nromanoff.json` —
+  `run_evals.sh` picks them up automatically, no code changes needed.
 
-- **Hackathon deadline June 15, 2026:** Demo video (5 min, live terminal, audio narration) +
-  Devpost submission (8 required fields) still required. Hackathon runs off `main` branch
-  (3-phase pipeline, stable). Independent of sprint work but must not be forgotten.
+- **Merge gate not cleared.** `future/cross-layer-verification` must NOT merge to `main`
+  until: (1) architecture docs rewritten for 4-phase pipeline, (2) Sprint 2 evals pass on
+  the new pipeline's output (not just saved transcripts from the old 3-phase run).
 
-- **Sprint 3 skill coverage:** 10 skills cover the nfury/rocba ground truth. Techniques from
-  tdungan and nromanoff (T1566 phishing, T1003.001 LSASS, T1021.002 SMB) have no playbooks yet.
-  Add them when those transcripts are available.
+- **Audit manifest eval is conditional.** `eval_metrics.py` only runs if
+  `reports/{host}-audit-manifest.json` exists. The manifest is only produced by
+  `run_cross_layer()` in `investigate.py` — the new 4-phase path. Running the old
+  `run_investigation()` (main branch) does not produce a manifest.
+
+- **Hackathon Devpost fields.** 8 required fields — check the submission page. Likely:
+  project name, description, tech stack, demo video URL, GitHub repo URL, team members,
+  category, and one more. The live investigation reports at `reports/nfury-report.html`
+  etc. should be linked or embedded.
 
 ---
 
 ## Relevant context
 
-- **Information boundary:** `_build_verifier_message()` in `custom-agent/verifier.py` is the
-  sole handoff construction point. Only `technique_id`, `tool_output[:1500]`, `artifact_hint`
-  cross. Do not add investigator reasoning here.
+- **Branch discipline:** `main` = hackathon submission (3-phase, stable, do not touch before demo).
+  `future/cross-layer-verification` = 6-sprint engineering run, all committed, evals green.
 
-- **same_verdict drives final; cross_verdict annotates:** `_final()` in `cross_verifier.py`.
+- **Information boundary is structural.** `_build_verifier_message()` in `custom-agent/verifier.py`
+  is the sole handoff construction point. Only `technique_id`, `tool_output[:1500]`,
+  `artifact_hint` cross. Investigator reasoning never passes through. Do not add context here.
+
+- **same_verdict drives final; cross_verdict annotates.** `_final()` in `cross_verifier.py`.
   Phase 3 CONTRADICTED cannot rescue Phase 2 REFUTED.
 
-- **INCONCLUSIVE ≠ REFUTED:** Timeout, budget exhaustion, insufficient output → INCONCLUSIVE.
-  Only contradicting evidence → REFUTED. rocba T1055 Round 1 timeout is the canonical example.
+- **INCONCLUSIVE ≠ REFUTED.** Timeout, budget exhaustion, insufficient output → INCONCLUSIVE.
+  Only contradicting evidence → REFUTED. `MAX_RETRY_CALLS = 2` grants extra calls on
+  INCONCLUSIVE before the forced verdict; if those also fail, INCONCLUSIVE is final.
 
-- **Skill injection location:** `_load_skill(finding_id)` is called inside `_challenge_round()`
-  in `auditor_agent.py` after `p2_block` is constructed and before `messages` is built. The
-  skill content is added to the per-technique user message, not to `_AUDITOR_SYSTEM`. This means
-  each challenge round for that technique sees the playbook — intentional, since multi-round
-  techniques (T1055 timeout → retry) need the playbook on Round 2 too.
+- **VERITAS_LAYER enforcement is at the subprocess level.** Binary allowlist in
+  `sift_server.py` reads the env var on import. Do not move this to a prompt instruction.
 
-- **Skills directory:** `skills/` at repo root. Path computed in `auditor_agent.py` as
-  `_SKILLS = os.path.normpath(os.path.join(_HERE, '..', 'skills'))` where `_HERE` is
-  `os.path.dirname(os.path.abspath(__file__))`. Glob pattern: `{technique_id}-*.md`.
+- **Python 3.8.10 on SIFT workstation.** All files that use modern type hints need
+  `from __future__ import annotations`. Currently done: `verifier.py`, `cross_verifier.py`,
+  `contracts.py`, `metrics.py`, `evals/eval_output.py`, `evals/eval_trajectory.py`,
+  `evals/eval_metrics.py`. Not done: `blue_agent.py`, `memory_agent.py`, `auditor_agent.py`
+  (those files have not been touched for 3.8 compat this session).
 
-- **Python version:** 3.8.10 on SIFT workstation. Use `from __future__ import annotations`
-  for modern type hints. Both eval scripts already have this.
+- **Pricing vectors in `custom-agent/metrics.py`.** Approximate 2026 rates:
+  sonnet-4-6 $3/$15 per MTok, haiku-4-5 $0.80/$4 per MTok. Verify against current
+  Anthropic pricing page before citing cost numbers in the Devpost submission.
 
-- **Do NOT merge to main** until Sprint 2 eval harness passes AND architecture docs are
-  rewritten for the 4-phase pipeline.
-
-- **Branch:** `future/cross-layer-verification`. `main` is hackathon submission (3-phase, stable).
-
-- **SIFT workstation:** `192.168.1.71` — ping before assuming online.
-
-- **Epistemic through-line (canonical):** `/home/username/research/epistemic-through-line.md`
+- **Epistemic through-line (canonical).** `/home/username/research/epistemic-through-line.md`
   "A verification result is only as independent as the information boundary between the
-  investigator and the verifier."
+  investigator and the verifier." This argument survives into the CCS 2027 paper on
+  constraint inflation. Do not lose it in architectural rewrites.
+
+- **SIFT workstation.** `192.168.1.71` — ping before assuming online.
+
+- **nfury ground truth.** 15 confirmed, 4 refuted. `reports/nfury-auditor-transcript.json`.
+  rocba: 1 confirmed, 4 refuted. `reports/rocba-auditor-transcript.json`.
