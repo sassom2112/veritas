@@ -6,7 +6,7 @@ structures that should be passed between phases. If a key isn't here,
 it doesn't belong in the handoff.
 """
 from __future__ import annotations
-from typing import TypedDict
+from typing import Dict, TypedDict
 
 
 class TriageHandoff(TypedDict):
@@ -111,3 +111,23 @@ class FinalTechniqueResult(TypedDict):
     cross_verdict: str        # raw CrossVerdict.verdict — annotation only
     final: str                # "HIGH_CONFIRMED" | "CONFIRMED" | "DISPUTED" | "REFUTED" | "INCONCLUSIVE"
     citation: str | None
+
+
+class PhaseTelemetry(TypedDict):
+    """Token and cost telemetry for one pipeline phase."""
+    input_tokens:  int
+    output_tokens: int
+    cost_usd:      float
+    duration_ms:   int
+
+
+class HostAuditManifest(TypedDict):
+    """Machine-readable execution manifest written per host investigation."""
+    case_id:               str
+    target_host:           str
+    total_cost_usd:        float
+    total_input_tokens:    int
+    total_output_tokens:   int
+    execution_duration_ms: int
+    phases:                Dict[str, PhaseTelemetry]
+    verdicts_summary:      Dict[str, int]

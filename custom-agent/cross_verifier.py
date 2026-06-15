@@ -26,6 +26,8 @@ Final adjudication (see investigate.py):
   CONTRADICTED  → DISPUTED       (flag for human review)
 """
 
+from __future__ import annotations
+
 import anthropic
 import asyncio
 import json
@@ -36,6 +38,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from contracts import CrossVerdict, FinalTechniqueResult, LayerClaim, SameLayerVerdict
+from metrics import Metrics
 
 logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('mcp').setLevel(logging.WARNING)
@@ -127,6 +130,7 @@ class CrossVerifier:
         memory_claims: list[LayerClaim],
         target_path: str,
         memory_path: str | None,
+        metrics: Metrics | None = None,
     ) -> tuple[list[CrossVerdict], list[CrossVerdict]]:
         """
         Cross-verify both claim sets concurrently.
@@ -140,12 +144,12 @@ class CrossVerifier:
         print(f"{'─'*60}")
 
         disk_tasks = [
-            self._verify_one(claim, target_path, memory_path, verifying_layer='memory')
+            self._verify_one(claim, target_path, memory_path, verifying_layer='memory', metrics=metrics)
             for claim in disk_claims
             if memory_path  # can only verify disk claims via memory if we have a dump
         ]
         memory_tasks = [
-            self._verify_one(claim, target_path, memory_path, verifying_layer='disk')
+            self._verify_one(claim, target_path, memory_path, verifying_layer='disk', metrics=metrics)
             for claim in memory_claims
         ]
 
@@ -176,6 +180,7 @@ class CrossVerifier:
         target_path: str,
         memory_path: str | None,
         verifying_layer: str,
+        metrics: Metrics | None = None,
     ) -> CrossVerdict:
         """Verify a single claim with one bounded MCP session."""
         if verifying_layer == 'memory':
@@ -230,13 +235,16 @@ class CrossVerifier:
 
                     tool_count = 0
                     while tool_count < MAX_VERIFY_ROUNDS * TOOLS_PER_VERIFY:
+                        _model = os.environ.get('VERITAS_MODEL', 'claude-sonnet-4-6')
                         response = self.client.messages.create(
-                            model=os.environ.get('VERITAS_MODEL', 'claude-sonnet-4-6'),
+                            model=_model,
                             max_tokens=1024,
                             system=system,
                             tools=tools,
                             messages=messages,
                         )
+                        if metrics:
+                            metrics.record_call(_model, response.usage, 'phase_3_cross')
                         messages.append({'role': 'assistant', 'content': response.content})
 
                         tool_blocks = [b for b in response.content if b.type == 'tool_use']

@@ -31,6 +31,8 @@ from datetime import datetime, timezone
 _HERE    = os.path.dirname(os.path.abspath(__file__))
 _REPORTS = os.path.normpath(os.path.join(_HERE, '..', 'reports'))
 
+TARGET_MAX_COST_USD = 20.0   # abort Phase 3 if Phase 1+2 already exceeded this
+
 # VERITAS case_io — writes auditor findings as DRAFT for human approval
 sys.path.insert(0, os.path.normpath(os.path.join(_HERE, '..', 'src')))
 try:
@@ -47,6 +49,7 @@ from auditor_agent import ForensicAuditor
 from contracts import AuditResult, FinalTechniqueResult, TriageHandoff
 from cross_verifier import CrossVerifier, adjudicate
 from disk_agent import DiskAgent
+from metrics import Metrics
 from verifier import verify_same_layer
 from extract_iocs import extract_iocs, merge_iocs
 from html_report import generate_report
@@ -133,6 +136,7 @@ async def run_cross_layer(
 
     host    = os.path.basename(target_path.rstrip('/'))
     started = datetime.now(timezone.utc)
+    metrics = Metrics()
 
     print(f"\n{'═'*60}")
     print(f"  VERITAS CROSS-LAYER INVESTIGATION")
@@ -147,6 +151,8 @@ async def run_cross_layer(
     print(f"  PHASE 1  —  PARALLEL INVESTIGATION  (disjoint tool grants)")
     print(f"{'━'*60}")
 
+    metrics.start_phase('phase_1_disk')
+    metrics.start_phase('phase_1_memory')
     disk_task = DiskAgent().investigate(target_path, ioc_data=ioc_data)
     if memory_path:
         mem_task  = mem_investigate_layered(memory_path, host=host)
@@ -154,13 +160,17 @@ async def run_cross_layer(
     else:
         disk_claims  = await disk_task
         memory_claims = []
+    metrics.end_phase('phase_1_disk')
+    metrics.end_phase('phase_1_memory')
 
     print(f"\n  Phase 1 complete: {len(disk_claims)} disk claims, "
           f"{len(memory_claims)} memory claims")
 
     # ── Phase 2: Same-layer blind replication (PRIMARY GATE) ──────────────
     all_claims = disk_claims + memory_claims
-    same_layer_verdicts = await verify_same_layer(all_claims, target_path, memory_path)
+    metrics.start_phase('phase_2_verify')
+    same_layer_verdicts = await verify_same_layer(all_claims, target_path, memory_path, metrics)
+    metrics.end_phase('phase_2_verify')
 
     same_verdict_map = {v['technique_id']: v for v in same_layer_verdicts}
     confirmed_disk   = [c for c in disk_claims
@@ -168,17 +178,28 @@ async def run_cross_layer(
     confirmed_memory = [c for c in memory_claims
                         if same_verdict_map.get(c['technique_id'], {}).get('verdict') == 'CONFIRMED']
 
+    phase_2_cost = metrics.total_cost_usd()
     print(f"\n  Phase 2 gate: {len(confirmed_disk)} disk / {len(confirmed_memory)} memory pass to Phase 3")
+    print(f"  Phase 2 cost so far: ${phase_2_cost:.4f}")
 
-    # ── Phase 3: Cross-layer corroboration (CONFIRMED claims only) ─────────
-    print(f"\n{'━'*60}")
-    print(f"  PHASE 3  —  CROSS-LAYER CORROBORATION")
-    print(f"  Confirmed disk → memory verifier | Confirmed memory → disk verifier")
-    print(f"{'━'*60}")
+    # ── Cost ceiling gate — abort Phase 3 if already over budget ──────────
+    if phase_2_cost > TARGET_MAX_COST_USD:
+        print(f"\n  COST CEILING REACHED (${phase_2_cost:.2f} > ${TARGET_MAX_COST_USD:.2f})")
+        print(f"  Skipping Phase 3. Cross-layer corroboration set to NO_VISIBILITY.")
+        disk_verdicts   = []
+        memory_verdicts = []
+    else:
+        # ── Phase 3: Cross-layer corroboration (CONFIRMED claims only) ─────
+        print(f"\n{'━'*60}")
+        print(f"  PHASE 3  —  CROSS-LAYER CORROBORATION")
+        print(f"  Confirmed disk → memory verifier | Confirmed memory → disk verifier")
+        print(f"{'━'*60}")
 
-    disk_verdicts, memory_verdicts = await CrossVerifier().verify_all(
-        confirmed_disk, confirmed_memory, target_path, memory_path
-    )
+        metrics.start_phase('phase_3_cross')
+        disk_verdicts, memory_verdicts = await CrossVerifier().verify_all(
+            confirmed_disk, confirmed_memory, target_path, memory_path, metrics
+        )
+        metrics.end_phase('phase_3_cross')
 
     # ── Phase 4: Adjudication and report ───────────────────────────────────
     print(f"\n{'━'*60}")
@@ -230,6 +251,19 @@ async def run_cross_layer(
     os.makedirs(_REPORTS, exist_ok=True)
     with open(path, 'w') as f:
         json.dump(unified, f, indent=2)
+
+    verdicts_summary = {
+        'HIGH_CONFIRMED': len(high_confirmed),
+        'CONFIRMED':      len(confirmed),
+        'DISPUTED':       len(disputed),
+        'REFUTED':        len(refuted),
+        'INCONCLUSIVE':   len(inconclusive),
+    }
+    manifest = metrics.to_dict(case_id=host, host=host, verdicts_summary=verdicts_summary)
+    manifest_path = os.path.join(_REPORTS, f'{host}-audit-manifest.json')
+    with open(manifest_path, 'w') as f:
+        json.dump(manifest, f, indent=2)
+    print(f"  Manifest:        {manifest_path}  (${manifest['total_cost_usd']:.4f} total)")
 
     print(f"\n{'═'*60}")
     print(f"  CROSS-LAYER INVESTIGATION COMPLETE  ({elapsed:.0f}s)")

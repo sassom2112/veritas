@@ -34,6 +34,18 @@ for gt in evals/ground_truth/*.json; do
 done
 
 echo ""
+echo "-- Metrics evals (conditional — requires pipeline run to generate manifest) --"
+for gt in evals/ground_truth/*.json; do
+  host="$(python3 -c "import json,sys; print(json.load(open('$gt'))['host'])")"
+  manifest="reports/${host}-audit-manifest.json"
+  if [ -f "$manifest" ]; then
+    _run evals/eval_metrics.py "$manifest"
+  else
+    echo "SKIP [${host}] metrics eval — ${manifest} not found (run pipeline to generate)"
+  fi
+done
+
+echo ""
 echo "Results: ${PASS} passed, ${FAIL} failed"
 echo ""
 

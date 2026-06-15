@@ -26,6 +26,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from contracts import LayerClaim, SameLayerVerdict
+from metrics import Metrics
 
 logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('mcp').setLevel(logging.WARNING)
@@ -119,6 +120,7 @@ async def _verify_one(
     target_path: str,
     memory_path: str | None,
     client: anthropic.Anthropic,
+    metrics: Metrics | None = None,
 ) -> SameLayerVerdict:
     """Verify a single claim with a fresh, isolated, same-layer MCP session."""
     layer = claim['source_layer']
@@ -158,6 +160,8 @@ async def _verify_one(
                         tools=tools,
                         messages=messages,
                     )
+                    if metrics:
+                        metrics.record_call(_INVESTIGATION_MODEL, response.usage, 'phase_2_verify')
                     messages.append({'role': 'assistant', 'content': response.content})
 
                     tool_blocks = [b for b in response.content if b.type == 'tool_use']
@@ -205,6 +209,8 @@ async def _verify_one(
                     tools=[_RECORD_VERDICT_TOOL],
                     tool_choice={'type': 'any'},
                 )
+                if metrics:
+                    metrics.record_call(_SYNTHESIS_MODEL, verdict_resp.usage, 'phase_2_verify')
                 for block in verdict_resp.content:
                     if (hasattr(block, 'type') and block.type == 'tool_use'
                             and block.name == 'record_verdict'):
@@ -229,6 +235,7 @@ async def verify_same_layer(
     claims: list[LayerClaim],
     target_path: str,
     memory_path: str | None,
+    metrics: Metrics | None = None,
 ) -> list[SameLayerVerdict]:
     """
     Phase 2 — PRIMARY GATE.
@@ -257,7 +264,7 @@ async def verify_same_layer(
     print(f"{'─'*60}")
 
     verdicts = await asyncio.gather(
-        *[_verify_one(c, target_path, memory_path, client) for c in claims]
+        *[_verify_one(c, target_path, memory_path, client, metrics) for c in claims]
     )
 
     confirmed    = sum(1 for v in verdicts if v['verdict'] == 'CONFIRMED')
