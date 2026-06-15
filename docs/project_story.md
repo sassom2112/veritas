@@ -134,6 +134,8 @@ Total runtime: 16 minutes. Total cost: $14.
 
 **The auditor is discriminating, not credulous.** 15 confirmed out of 19 — but the 4 refutals matter. T1071.001 was flagged in memory and refuted on disk because the netscan showed no active web C2 connections. The Auditor distinguished between a memory keyword match and a confirmed active C2 channel.
 
+**The self-correction case — T1071.001.** The Memory Agent flagged active C2 via web protocol. The TCP state string `established` appeared in `windows.netscan` output — a valid memory signal. The Auditor received no context from the Memory Agent. It ran `windows.netscan` independently and read all 432 connection records. Every `ESTABLISHED` and `CLOSE_WAIT` entry resolved to Apple, Microsoft, or Google CDN infrastructure. Zero active HTTP C2 connections. **Returned REFUTED.** The system overrode its own investigator's output based on what the filesystem and memory actually contained. The Memory Agent was not wrong to flag it; TCP state strings appear in any live Windows memory image. The architecture is correct to require independent physical verification before any claim enters the report.
+
 **Every confirmed finding is independently reproducible.** The audit log contains the exact command, the exact output, and the exact timestamp. There are no findings that require trusting the model.
 
 ---

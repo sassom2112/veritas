@@ -181,7 +181,19 @@ false positives.
 nfury: 19 techniques investigated, 15 confirmed, 4 refuted by the Auditor. Four
 false positives refuted on physical evidence---the exact distinction between
 ``this binary exists in a legitimate Windows location'' and ``this binary
-was placed there by an attacker.'' One technique confirmed:
+was placed there by an attacker.''
+
+\textbf{Self-correction --- T1071.001.} The Memory Agent flagged active C2
+via web protocol: the TCP state string \texttt{established} appeared in
+\texttt{windows.netscan} output, a valid memory signal. The Auditor received
+no context from the Memory Agent. It ran \texttt{windows.netscan}
+independently and read all 432 connection records. Every \texttt{ESTABLISHED}
+and \texttt{CLOSE\_WAIT} entry resolved to Apple, Microsoft, or Google CDN
+infrastructure. Zero active HTTP C2 connections. \textbf{Returned
+\textsc{Refuted}.} The system overrode its own investigator's output based
+on what memory actually contained. This is the architecture doing its job:
+structural separation ensures that investigator confidence cannot propagate
+into the final report without independent physical verification. One technique confirmed:
 \texttt{procdump.exe} in \texttt{/Tools/SysInternals/} and
 \texttt{spinlock.exe} in the WER ReportQueue crash dump, confirming the
 implant executed on this machine.

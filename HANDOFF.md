@@ -50,9 +50,15 @@ open reports/nfury-report.html   # or xdg-open on Linux
 Demo script (5 min, audio narration):
 1. (0:00–0:30) Show the problem: LLMs hallucinate forensic findings. One command.
 2. (0:30–1:30) Show Phase 1+2 running — terminal output, tool calls, triage flags
-3. (1:30–3:00) Show the Auditor challenging each finding — CONFIRMED vs REFUTED live
-4. (3:00–4:00) Show the HTML report — 15 confirmed, 4 refuted, every finding cited to artifact
-5. (4:00–5:00) Show the 4-refutal pattern — T1071.001 memory noise dismissed, explain why
+3. (1:30–2:30) Show the Auditor challenging each finding — CONFIRMED vs REFUTED live
+4. (2:30–3:15) **Self-correction beat — T1071.001:** narrate that the Memory Agent flagged
+   active C2 (show the triage output showing T1071.001 in the findings list). Then show the
+   Auditor's verdict: ran windows.netscan independently, read 432 connection records, every
+   established connection resolved to CDN, returned REFUTED. Say explicitly: "The system
+   caught its own investigator and overrode the finding based on physical bytes."
+5. (3:15–4:15) Show the HTML report — 15 confirmed, 4 refuted, every finding cited to artifact
+6. (4:15–5:00) Show the 4-refutal pattern — same class of memory noise dismissed on every host,
+   explain that discriminating behavior (not just confirmations) is the proof the game works
 
 Devpost submission needs 8 fields — check hackathon page for exact requirements.
 

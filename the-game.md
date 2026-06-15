@@ -102,6 +102,26 @@ Without the Auditor you ship 19 findings on nfury. Four of them are wrong. You d
 
 ---
 
+## The Self-Correction Case
+
+T1071.001 — Application Layer Protocol: Web Protocols — is the canonical example of the system catching and overriding its own investigator's output.
+
+The Memory Agent flagged it. `windows.netscan` output contained the string `established` — a TCP state value — which matched the technique's detection signal. The Memory Agent's report marked T1071.001 as active C2 via web protocol. High signal.
+
+The Auditor received only the technique ID and a filesystem/memory hint. It had no access to the Memory Agent's reasoning or to the fact that the Memory Agent had already flagged this with apparent confidence.
+
+The Auditor ran `windows.netscan` independently and read all 432 connection records. Every `ESTABLISHED` and `CLOSE_WAIT` entry resolved to Apple, Microsoft, or Google CDN infrastructure. No active HTTP C2 connections anywhere in the connection table.
+
+**Returned REFUTED.**
+
+This is not the Auditor being careful. This is the Auditor running out of connections to check because the actual network data did not support the claim. The architecture did not fail safely — it actively corrected a wrong answer that had already been written into the findings list.
+
+Without the Auditor, T1071.001 would appear in the final report as a confirmed finding. It would describe active command-and-control infrastructure that does not exist. An analyst relying on that report would pursue a false lead.
+
+The Memory Agent was not wrong to flag it. TCP state strings appear in any live Windows memory capture regardless of whether a malicious connection is active. The Memory Agent's job is to surface signals. The Auditor's job is to verify them against physical bytes. The architecture only works because these are structurally separate agents with separate tool sessions.
+
+---
+
 ## The Special Case — rocba
 
 rocba is the C2 relay node. Zero disk artifacts by design — no persistence, no lateral movement, no staged files. The attacker didn't leave anything on disk.
