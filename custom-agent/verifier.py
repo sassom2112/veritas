@@ -14,6 +14,8 @@ Budget: MAX_VERIFY_CALLS = 4 per claim (Phase 2 cap, separate from Phase 1).
 All verifications run concurrently via asyncio.gather.
 """
 
+from __future__ import annotations
+
 import anthropic
 import asyncio
 import json
@@ -32,6 +34,12 @@ _HERE    = os.path.dirname(os.path.abspath(__file__))
 _REPORTS = os.path.normpath(os.path.join(_HERE, '..', 'reports'))
 
 MAX_VERIFY_CALLS = 4   # Phase 2 budget per claim — DO NOT conflate with Phase 1 MAX_ROUNDS
+
+# Model routing — Sprint 4.
+# Investigation turns: model chooses tools, interprets raw output. Sonnet stays.
+# Synthesis turn: forced record_verdict schema call. Haiku is sufficient.
+_INVESTIGATION_MODEL = os.environ.get('VERITAS_MODEL', 'claude-sonnet-4-6')
+_SYNTHESIS_MODEL     = os.environ.get('VERITAS_SYNTHESIS_MODEL', 'claude-haiku-4-5-20251001')
 
 # Forced tool schema for the verdict turn — model MUST call this, cannot return prose.
 # Structurally different from _RECORD_FINDING_TOOL: verdict + citation, not a new finding.
@@ -144,7 +152,7 @@ async def _verify_one(
                 call_count = 0
                 while call_count < MAX_VERIFY_CALLS:
                     response = client.messages.create(
-                        model=os.environ.get('VERITAS_MODEL', 'claude-sonnet-4-6'),
+                        model=_INVESTIGATION_MODEL,
                         max_tokens=1024,
                         system=_VERIFIER_SYSTEM,
                         tools=tools,
@@ -190,7 +198,7 @@ async def _verify_one(
                     ),
                 })
                 verdict_resp = client.messages.create(
-                    model=os.environ.get('VERITAS_MODEL', 'claude-sonnet-4-6'),
+                    model=_SYNTHESIS_MODEL,
                     max_tokens=512,
                     system=_VERIFIER_SYSTEM,
                     messages=messages,
