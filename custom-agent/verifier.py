@@ -34,7 +34,11 @@ logging.getLogger('mcp').setLevel(logging.WARNING)
 _HERE    = os.path.dirname(os.path.abspath(__file__))
 _REPORTS = os.path.normpath(os.path.join(_HERE, '..', 'reports'))
 
-MAX_VERIFY_CALLS = 4   # Phase 2 budget per claim — DO NOT conflate with Phase 1 MAX_ROUNDS
+MAX_VERIFY_CALLS  = 4   # Phase 2 budget per claim — DO NOT conflate with Phase 1 MAX_ROUNDS
+MAX_RETRY_CALLS   = 2   # Sprint 6: additional calls granted on INCONCLUSIVE before final verdict
+
+# Timeout detection — any of these strings in tool output triggers PID-targeted retry
+_TIMEOUT_SIGNALS = ('timeout', 'TimeoutExpired', 'timed out', 'Timeout', '[Tool error:')
 
 # Model routing — Sprint 4.
 # Investigation turns: model chooses tools, interprets raw output. Sonnet stays.
@@ -152,6 +156,7 @@ async def _verify_one(
                 }]
 
                 call_count = 0
+                all_tool_outputs: list[str] = []
                 while call_count < MAX_VERIFY_CALLS:
                     response = client.messages.create(
                         model=_INVESTIGATION_MODEL,
@@ -182,6 +187,7 @@ async def _verify_one(
                             out = r.content[0].text
                         except Exception as exc:
                             out = f'[Tool error: {exc}]'
+                        all_tool_outputs.append(out)
                         call_count += 1
                         print('.', end='', flush=True)
                         tool_results.append({
@@ -190,6 +196,75 @@ async def _verify_one(
                             'content': out[:2000],
                         })
                     messages.append({'role': 'user', 'content': tool_results})
+
+                # ── INCONCLUSIVE feedback loop (Sprint 6) ────────────────────
+                # If budget was exhausted, grant MAX_RETRY_CALLS more targeted calls
+                # before forcing the verdict. Two recovery paths:
+                #   Timeout signal  → PID-targeted retry (e.g. malfind --pid)
+                #   Budget exhausted → narrowed artifact search
+                if call_count >= MAX_VERIFY_CALLS and all_tool_outputs:
+                    timeout_detected = any(
+                        sig in out
+                        for out in all_tool_outputs
+                        for sig in _TIMEOUT_SIGNALS
+                    )
+                    if timeout_detected:
+                        retry_hint = (
+                            'One or more tool calls timed out during a full-image scan. '
+                            'Retry with a PID-targeted invocation against the specific process '
+                            'in the artifact hint. Example: '
+                            '  vol -f <image> windows.malfind --pid <PID>\n'
+                            f'You have {MAX_RETRY_CALLS} additional calls. Use them precisely.'
+                        )
+                    else:
+                        retry_hint = (
+                            'Budget was exhausted without a conclusive result. '
+                            'Narrow your search to the specific file path or address '
+                            'in the artifact hint — do not repeat broad scans.\n'
+                            f'You have {MAX_RETRY_CALLS} additional calls. Use them precisely.'
+                        )
+                    messages.append({'role': 'user', 'content': retry_hint})
+                    print('↺', end='', flush=True)
+
+                    retry_count = 0
+                    while retry_count < MAX_RETRY_CALLS:
+                        resp = client.messages.create(
+                            model=_INVESTIGATION_MODEL,
+                            max_tokens=1024,
+                            system=_VERIFIER_SYSTEM,
+                            tools=tools,
+                            messages=messages,
+                        )
+                        if metrics:
+                            metrics.record_call(_INVESTIGATION_MODEL, resp.usage, 'phase_2_verify_retry')
+                        messages.append({'role': 'assistant', 'content': resp.content})
+
+                        retry_blocks = [b for b in resp.content if b.type == 'tool_use']
+                        if not retry_blocks:
+                            break
+
+                        retry_results = []
+                        for block in retry_blocks:
+                            if retry_count >= MAX_RETRY_CALLS:
+                                retry_results.append({
+                                    'type': 'tool_result',
+                                    'tool_use_id': block.id,
+                                    'content': '[RETRY BUDGET EXHAUSTED]',
+                                })
+                                continue
+                            try:
+                                r = await session.call_tool(block.name, block.input)
+                                out = r.content[0].text
+                            except Exception as exc:
+                                out = f'[Tool error: {exc}]'
+                            retry_count += 1
+                            print('.', end='', flush=True)
+                            retry_results.append({
+                                'type': 'tool_result',
+                                'tool_use_id': block.id,
+                                'content': out[:2000],
+                            })
+                        messages.append({'role': 'user', 'content': retry_results})
 
                 # Forced verdict — model cannot return prose
                 messages.append({
