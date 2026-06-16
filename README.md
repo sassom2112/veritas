@@ -2,7 +2,7 @@
 
 VERITAS solves the AI forensic investigator trust problem — not by finding a better model, but by making hallucinated findings structurally unable to reach the final report.
 
-**Two agents. The Optimist investigates. The Cynic** receives only the findings list and must confirm each claim from physical bytes on disk before it enters the report. Model confidence produces neither CONFIRMED nor REFUTED.
+**Three agents. Disk Agent + Memory Agent investigate on separate evidentiary layers. The Forensic Auditor** receives only the findings list and must confirm each claim from physical bytes before it enters the report. Model confidence produces neither CONFIRMED nor REFUTED.
 
 Three hosts, real SANS case data: **32 confirmed, 16 correctly refuted.** The 4-refutal pattern holds across every host including the attacker's own C2 node — an operator who deliberately left nothing on disk. The Auditor found one thing and dismissed four. Same standard, every host.
 
@@ -26,11 +26,11 @@ off disk. Model confidence produces neither CONFIRMED nor REFUTED.
 
 ---
 
-## Why Two Agents
+## Why Three Agents
 
-This is the same architectural pattern as constraint projection in adversarial ML — you don't fix the problem by optimizing the thing that produces bad outputs, you build the layer that forces outputs back into valid space before they count. The Auditor is that layer. It doesn't care how confident the Triage Agent was. It only cares what the filesystem says.
+This is the same architectural pattern as constraint projection in adversarial ML — you don't fix the problem by optimizing the thing that produces bad outputs, you build the layer that forces outputs back into valid space before they count. The Forensic Auditor is that layer. It doesn't care how confident the Disk Agent was. It only cares what the filesystem says.
 
-The Optimist and the Cynic are structurally decoupled: the Auditor receives the findings list and nothing else. No investigation context, no Phase 1 scores, no technique labels. If it can't re-derive the finding from physical bytes in an isolated MCP session, the finding doesn't ship. Wide triage + adversarial verification is the correct two-stage architecture — not triage alone, not verification alone.
+The Disk Agent, Memory Agent, and Forensic Auditor are structurally decoupled: the Auditor receives the findings list and nothing else. No investigation context, no Phase 1 scores, no technique labels. If it can't re-derive the finding from physical bytes in an isolated MCP session, the finding doesn't ship. Wide investigation + adversarial verification is the correct architecture — not investigation alone, not verification alone.
 
 ---
 
@@ -41,17 +41,17 @@ The Optimist and the Cynic are structurally decoupled: the Auditor receives the 
 **Phase 1 — Deterministic triage** (~25 SIFT commands, no LLM, <60 s)
 Corpus-calibrated log-odds weights from 800+ labeled malware samples. Fully reproducible.
 
-**Phase 2 — Triage Agent (The Optimist)** (75-call Claude budget)
+**Phase 1a — Disk Agent (blue_agent.py)** (75-call Claude budget)
 Investigates event logs, prefetch, SAM hives, registry, network artifacts.
 Receives raw artifacts only — no Phase 1 score, no technique labels. Structural decoupling.
 
-**Memory — Volatility 3** (parallel)
-Process injection, VAD anomalies, credential dumps invisible on disk.
+**Phase 1b — Memory Agent (memory_agent.py)** (parallel)
+Volatility 3 — process injection, VAD anomalies, credential dumps invisible on disk.
 
-**Phase 3 — Forensic Auditor (The Cynic)** (parallel, isolated MCP sessions)
+**Phase 2 — Forensic Auditor (auditor_agent.py)** (parallel, isolated MCP sessions)
 Receives the findings list and nothing else. Mandate: assume every finding is false until
 the filesystem proves otherwise. CONFIRMED requires a positive tool return value.
-Runs all challenges concurrently via `asyncio.gather`.
+5 rounds × 3 tool calls per technique, all challenges concurrent via `asyncio.gather`.
 
 **IOC extraction → HTML report → campaign propagation**
 
@@ -196,14 +196,12 @@ contamination — IOCs are never injected automatically.
 ### Rebuild signal weights
 
 ```bash
-# Collect malware corpus from MalwareBazaar + HybridAnalysis
-MB_API_KEY=your_key HA_API_KEY=your_key python3 custom-agent/build_corpus.py --limit 100
-python3 custom-agent/compute_weights.py        # → data/calibrated_weights.json
-
 # Retrain Sysmon ASL (requires Mordor datasets — see DATASET.md)
-python3 custom-agent/brain.py                  # ~30 min, 4500 iterations
-python3 custom-agent/export_patterns.py        # → reports/operational_rules.json
+python3 training/brain.py                  # ~30 min, 4500 iterations
+python3 training/sigma_exporter.py         # → reports/sigma_rules/
 ```
+
+Pre-built weights are already in `data/calibrated_weights.json`. Retraining is only needed to extend coverage beyond the 9 included MITRE techniques.
 
 ---
 
@@ -236,17 +234,15 @@ this layer to a live Sysmon endpoint path is the next engineering step.
 | File | Role |
 |---|---|
 | `custom-agent/investigate.py` | Orchestrator — full pipeline end to end |
-| `custom-agent/blue_agent.py` | Triage Agent — Pass 1 scoring + Pass 2 agentic loop |
+| `custom-agent/blue_agent.py` | Disk Agent — Pass 1 scoring + Pass 2 agentic loop |
+| `custom-agent/memory_agent.py` | Memory Agent — Volatility 3 parallel path |
 | `custom-agent/auditor_agent.py` | Forensic Auditor — adversarial parallel re-verification |
-| `custom-agent/memory_agent.py` | Memory analysis — Volatility 3 parallel path |
 | `custom-agent/sift_server.py` | MCP server — 4-gate validator, subprocess execution |
 | `custom-agent/extract_iocs.py` | IOC extraction — confirmed artifacts only |
 | `custom-agent/html_report.py` | HTML report — exec summary, IOC table, Auditor transcript |
-| `custom-agent/build_corpus.py` | Corpus collection — MalwareBazaar + HybridAnalysis |
-| `custom-agent/compute_weights.py` | Weight calibration — log-odds from corpus |
-| `custom-agent/brain.py` | Sysmon ASL training — Red/Blue adversarial loop |
-| `custom-agent/export_patterns.py` | Exports trained signals → `operational_rules.json` |
 | `fast-triage/fast_triage.py` | Deterministic triage — no LLM, sub-10 s |
+| `training/brain.py` | Sysmon ASL training — Red/Blue adversarial loop |
+| `training/sigma_exporter.py` | Exports trained signals → `reports/sigma_rules/` |
 
 ---
 

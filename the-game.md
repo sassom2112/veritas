@@ -7,7 +7,7 @@ permalink: /how-it-works
 # How VERITAS Works
 {: .fs-9 }
 
-Explained as a two-player game.
+Explained as a game.
 {: .fs-6 .fw-300 }
 
 ---
@@ -22,19 +22,25 @@ That's not a model quality problem. It's a structural property of any system whe
 
 ---
 
-## The Two Players
+## The Three Agents
 
-**The Optimist — Triage Agent**
+**The Disk Agent** (blue_agent.py)
 
-Goes through everything. Event logs, prefetch files, registry hives, memory dumps, network artifacts. Forms hypotheses. Builds a findings list. Fast, thorough, creative.
+Goes through everything on disk. Event logs, prefetch files, registry hives, shellbags, network artifacts. Forms hypotheses. Builds a findings list. Fast, thorough, creative.
 
 Also wrong sometimes. Doesn't know it's wrong.
 
-**The Cynic — Forensic Auditor**
+**The Memory Agent** (memory_agent.py)
 
-Receives only the findings list. Never sees the Optimist's reasoning. Never sees the evidence chain. Never sees how confident it sounded. Just the claims — a list of technique IDs and nothing else.
+Runs Volatility 3 in parallel. Process injection, VAD anomalies, credential dumps — artifacts that only exist in volatile memory. Produces its own findings list on a separate evidentiary layer.
 
-Has five rounds, two tool calls per round. Must call real forensic tools and read physical bytes off disk or out of memory. Returns one of three verdicts per finding:
+Also wrong sometimes. Memory surfaces a lot of noise.
+
+**The Forensic Auditor** (auditor_agent.py)
+
+Receives only the findings list. Never sees the Disk Agent's reasoning. Never sees the Memory Agent's evidence chain. Never sees how confident either sounded. Just the claims — a list of technique IDs and nothing else.
+
+Has five rounds, three tool calls per round. Must call real forensic tools and read physical bytes off disk or out of memory. Returns one of three verdicts per finding:
 
 - **CONFIRMED** — positive tool return value. The artifact is there.
 - **REFUTED** — evidence of absence. The artifact is not where the technique requires it.
@@ -46,11 +52,11 @@ No other input is valid. Model confidence counts for nothing.
 
 ## The Rules
 
-The Optimist can say anything.
+The Disk Agent and Memory Agent can say anything.
 
-The Cynic can only say what the filesystem proves.
+The Forensic Auditor can only say what the filesystem proves.
 
-A finding is only CONFIRMED when the Cynic calls a real forensic tool and reads physical bytes. The Cynic cannot ask the Optimist for clarification. Cannot see its reasoning chain. Cannot be influenced by how confident it sounded. This is structural isolation — a session boundary enforced in code, not a prompt instruction.
+A finding is only CONFIRMED when the Forensic Auditor calls a real forensic tool and reads physical bytes. The Auditor cannot ask the Disk Agent for clarification. Cannot see its reasoning chain. Cannot be influenced by how confident it sounded. This is structural isolation — a session boundary enforced in code, not a prompt instruction.
 
 **The MCP Validator Gate** enforces this at the subprocess level. Before any tool call executes, four gates run in Python:
 
@@ -92,9 +98,9 @@ The consistent pattern isn't the number — it's the class of signal. Memory ana
 
 On nfury, T1071.001 was flagged because the string `established` appeared in `windows.netscan` output. TCP state strings appear in memory regardless of whether any malicious connection is active. The Auditor ran `windows.netscan` and checked all 432 connection records. Every ESTABLISHED and CLOSE\_WAIT connection resolved to Apple, Microsoft, or Google CDN infrastructure. Returned REFUTED.
 
-That is not the Cynic being careful. That is the Cynic running out of connections to check because the actual network data didn't support the claim.
+That is not the Forensic Auditor being careful. That is the Forensic Auditor running out of connections to check because the actual network data didn't support the claim.
 
-Without the Cynic you ship 19 findings on nfury. Four of them are wrong. You don't know which four.
+Without the Forensic Auditor you ship 19 findings on nfury. Four of them are wrong. You don't know which four.
 
 ---
 
@@ -116,7 +122,7 @@ The architecture works on hosts that are specifically designed to defeat forensi
 
 After nfury is solved, confirmed IOCs go into a file. SHA-256 hashes. C2 addresses. Account names. Only confirmed artifacts — nothing the Cynic rejected.
 
-When tdungan is investigated, the Triage Agent loads that file and hunts specifically for those artifacts. Not general search. Directed investigation seeded by physically verified prior findings.
+When tdungan is investigated, the Disk Agent loads that file and hunts specifically for those artifacts. Not general search. Directed investigation seeded by physically verified prior findings.
 
 Same httppump variant. Same C2 at `192.168.1.5/ads/`. Same `SRL-Helpdesk` account. Different host. The NTLM hash matched exactly — `4c3f5e9f...` on both machines. Credential reuse confirmed by artifact, not by model inference about campaign patterns.
 
@@ -128,16 +134,16 @@ The IOC file contains no LLM reasoning, no confidence scores, no context from th
 
 ## What the Architecture Actually Does
 
-The Optimist is unconstrained. Given a suspicious disk image and a mandate to find compromise, it will find something that looks like every technique on the ATT&CK matrix. Some findings will be real. Some will be memory noise. Some will be parser artifacts. It cannot tell the difference.
+The Disk Agent and Memory Agent are unconstrained. Given a suspicious disk image and a mandate to find compromise, they will find something that looks like every technique on the ATT&CK matrix. Some findings will be real. Some will be memory noise. Some will be parser artifacts. They cannot tell the difference.
 
-The Cynic is the constraint layer. It forces every finding back into physical reality before it enters the report.
+The Forensic Auditor is the constraint layer. It forces every finding back into physical reality before it enters the report.
 
 | | Findings shipped | Wrong findings | Cited to physical artifact |
 |---|---|---|---|
-| Without Cynic | 19 | 4 (unknown) | 0 |
-| With Cynic | 15 | 0 | 15 |
+| Without Forensic Auditor | 19 | 4 (unknown) | 0 |
+| With Forensic Auditor | 15 | 0 | 15 |
 
-The architecture doesn't make the Optimist smarter. It makes the Optimist's hallucinations structurally irrelevant to the final output.
+The architecture doesn't make the investigators smarter. It makes their hallucinations structurally irrelevant to the final output.
 
 ---
 
@@ -147,7 +153,7 @@ The architecture doesn't make the Optimist smarter. It makes the Optimist's hall
 # Fast triage — no API key, < 10 seconds, decides if the image is worth $14
 python3 fast-triage/fast_triage.py /mnt/hostname
 
-# Full game — Optimist investigates, Cynic verifies, HTML report written
+# Full pipeline — Disk Agent + Memory Agent investigate, Forensic Auditor verifies, HTML report written
 python3 custom-agent/sift_server.py          # Terminal 1
 python3 custom-agent/investigate.py /mnt/hostname  # Terminal 2
 

@@ -18,7 +18,7 @@ Autonomous Windows forensic investigation. Every confirmed finding backed by a p
 
 ## The one-line version
 
-A Triage Agent investigates. A Forensic Auditor challenges every finding independently. CONFIRMED requires a positive return value from a real forensic tool. Model confidence counts for nothing.
+Disk Agent + Memory Agent investigate on separate evidentiary layers. The Forensic Auditor challenges every finding independently. CONFIRMED requires a positive return value from a real forensic tool. Model confidence counts for nothing.
 
 ---
 
