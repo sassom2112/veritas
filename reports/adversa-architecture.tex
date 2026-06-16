@@ -61,19 +61,21 @@
     \node (L2) [layer=blue!8, draw=blue!70!black, below=of L1] {
         \textbf{Layer 2 \;·\; Forensic Agency Tier \small(Multi-Agent Engine)} \\[2pt]
         \footnotesize
-        \textbf{Phase 1} — Disk Agent (\texttt{blue\_agent.py}):
+        \textbf{Phase 1a} — Disk Agent (\texttt{blue\_agent.py}):
             Pass 1 deterministic sweep ($<$60 s)
             $\rightarrow$ ASL scoring
-            $\rightarrow$ Pass 2 agentic loop (25 calls, event logs / prefetch / shellbags / LSA) \\[2pt]
+            $\rightarrow$ Pass 2 agentic loop (25 calls, event logs / prefetch / shellbags / LSA) \\[1pt]
+        \textbf{Phase 1b} — Memory Agent (\texttt{memory\_agent.py}):
+            Volatility 3 parallel path · process injection / VAD anomalies / credential dumps \\[2pt]
         \textbf{Phase 2} — Forensic Auditor (\texttt{auditor\_agent.py}):
-            \texttt{asyncio.gather} · 3 rounds $\times$ 2 tools per technique ·
+            \texttt{asyncio.gather} · 5 rounds $\times$ 3 tools per technique ·
             \textsc{confirmed} / \textsc{refuted} / \textsc{inconclusive}
     };
 
     %% Anthropic API node (right of L2)
     \node (API) [api, right=2.2cm of L2] {
         \textbf{Anthropic API} \\
-        \small\texttt{claude-opus-4-5}
+        \small\texttt{claude-sonnet-4-6}
     };
 
     %% ── LAYER 3 ──────────────────────────────────────────────────
