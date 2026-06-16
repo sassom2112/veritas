@@ -63,8 +63,15 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 ```
 
 ```bash
-python3 custom-agent/sift_server.py          # Terminal 1 — MCP server
-python3 custom-agent/investigate.py --case /mnt/hostname  # Terminal 2
+# Terminal 1 — MCP forensic tool server
+source forensics_env/bin/activate
+python3 custom-agent/sift_server.py
+```
+
+```bash
+# Terminal 2 — full investigation
+source forensics_env/bin/activate
+python3 custom-agent/investigate.py --case /mnt/hostname
 ```
 
 Requires a Windows disk image mounted read-only on a SANS SIFT Workstation. The venv step is required on SIFT — Debian 12 blocks system-wide pip installs by default.

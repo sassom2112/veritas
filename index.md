@@ -54,12 +54,19 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 
 ```bash
 # Terminal 1 — MCP forensic tool server
+source forensics_env/bin/activate
 python3 custom-agent/sift_server.py
+```
 
+```bash
 # Terminal 2 — full investigation
+source forensics_env/bin/activate
 python3 custom-agent/investigate.py --case /mnt/hostname
+```
 
-# Fast triage only — no API key, < 10 seconds
+```bash
+# Fast triage — no API key, < 10 seconds
+source forensics_env/bin/activate
 python3 fast-triage/fast_triage.py /mnt/hostname
 ```
 
