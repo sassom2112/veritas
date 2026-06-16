@@ -57,6 +57,21 @@ python3 fast-triage/fast_triage.py /mnt/hostname
 
 Requires a Windows disk image mounted read-only on a SANS SIFT Workstation.
 
+### Campaign mode — multi-host investigation
+
+```bash
+# First host — baseline investigation
+python3 custom-agent/investigate.py --case ~/cases/nfury
+
+# Second host — seed with confirmed IOCs from first host
+python3 custom-agent/investigate.py --case ~/cases/tdungan nfury
+
+# Third host — all prior confirmed artifacts injected
+python3 custom-agent/investigate.py --case ~/cases/nromanoff nfury tdungan
+```
+
+Host names resolve to `reports/<host>-iocs.json`. Only Auditor-confirmed artifacts propagate — hallucinations that were refuted on the first host cannot contaminate the next investigation.
+
 ---
 
 ## The security boundary

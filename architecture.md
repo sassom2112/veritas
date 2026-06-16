@@ -6,7 +6,7 @@ permalink: /architecture
 
 # Architecture
 
-Two agents. Zero shared state. One rule: `CONFIRMED` requires a positive tool return.
+Three agents. Zero shared state. One rule: `CONFIRMED` requires a positive tool return.
 
 ---
 
@@ -25,23 +25,22 @@ Mounted Disk Image (read-only)
 +---------------------------+
         |
         v
-+---------------------------+
-|    Triage Agent           |  75-call Claude budget
-|    "The Optimist"         |  reads raw artifacts only — no scores, no labels
-|    (blue_agent.py)        |
 +---------------------------+     +---------------------------+
-        |                         |  Memory Analysis          |
-        |                         |  Volatility 3 (parallel)  |
-        |                         |  (memory_agent.py)        |
-        |                         +---------------------------+
+|    Disk Agent             |     |    Memory Agent           |
+|    (blue_agent.py)        |     |    (memory_agent.py)      |
+|    75-call Claude budget  |     |    Volatility 3 parallel  |
+|    raw artifacts only     |     |    process injection,     |
+|    no scores, no labels   |     |    VAD anomalies,         |
+|                           |     |    credential dumps       |
++---------------------------+     +---------------------------+
         |  findings list only          |
         |  (technique IDs, nothing else)|
         +------------------------------+
         v
 +---------------------------+
 |    Forensic Auditor       |  isolated MCP session, no shared state
-|    "The Cynic"            |  mandate: assume every finding is false
-|    (auditor_agent.py)     |  5 rounds x 2 tool calls per technique
+|    (auditor_agent.py)     |  mandate: assume every finding is false
+|                           |  5 rounds × 3 tool calls per technique
 +---------------------------+
         |
         v
@@ -50,7 +49,7 @@ Mounted Disk Image (read-only)
   + HTML report
 ```
 
-**The structural guarantee:** The Auditor receives technique IDs and nothing else from the Triage Agent's session. `CONFIRMED` requires a positive tool return value. Timeout returns `INCONCLUSIVE` — never `CONFIRMED`.
+**The structural guarantee:** The Auditor receives technique IDs and nothing else from the investigator sessions. `CONFIRMED` requires a positive tool return value. Timeout returns `INCONCLUSIVE` — never `CONFIRMED`.
 
 ---
 
@@ -58,7 +57,7 @@ Mounted Disk Image (read-only)
 
 **Custom MCP Server + Multi-Agent Framework**
 
-A purpose-built MCP server exposes typed forensic functions rather than a generic shell. Two Claude agents run in completely separate MCP sessions with zero shared state. The Triage Agent proposes findings. The Forensic Auditor independently re-runs tool calls to verify. A `CONFIRMED` verdict requires a positive tool return — not model confidence. The agents physically cannot run destructive commands because the MCP server does not expose them.
+A purpose-built MCP server exposes typed forensic functions rather than a generic shell. Three Claude agents run in completely separate MCP sessions with zero shared state. The Disk Agent and Memory Agent investigate on disjoint evidentiary layers. The Forensic Auditor independently re-runs tool calls to verify every finding. A `CONFIRMED` verdict requires a positive tool return — not model confidence. The agents physically cannot run destructive commands because the MCP server does not expose them.
 
 ---
 
@@ -100,10 +99,10 @@ The Forensic Auditor receives:
 - A JSON list of technique IDs
 
 The Forensic Auditor does **not** receive:
-- The Triage Agent's tool call history
-- The Triage Agent's reasoning or analysis
+- The Disk Agent's or Memory Agent's tool call history
+- Either investigator's reasoning or analysis
 - Confidence scores or weights
-- Any context from the Triage Agent's MCP session
+- Any context from the investigator MCP sessions
 
 This is enforced by the code, not a prompt. Reading `auditor_agent.py` verifies the property.
 
