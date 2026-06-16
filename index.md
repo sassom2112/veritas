@@ -42,6 +42,9 @@ Exactly 4 refutals per host across all four investigations. Every confirmed find
 
 ```bash
 git clone https://github.com/sassom2112/find-evil-2026.git
+cd find-evil-2026
+python3 -m venv forensics_env
+source forensics_env/bin/activate
 pip install -r requirements.txt
 export ANTHROPIC_API_KEY="sk-ant-..."
 
@@ -55,7 +58,7 @@ python3 custom-agent/investigate.py --case /mnt/hostname
 python3 fast-triage/fast_triage.py /mnt/hostname
 ```
 
-Requires a Windows disk image mounted read-only on a SANS SIFT Workstation.
+Requires a Windows disk image mounted read-only on a SANS SIFT Workstation. The venv step is required on SIFT — Debian 12 blocks system-wide pip installs by default.
 
 ### Campaign mode — multi-host investigation
 
