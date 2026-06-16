@@ -46,8 +46,13 @@ cd find-evil-2026
 python3 -m venv forensics_env
 source forensics_env/bin/activate
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY="sk-ant-..."
+```
 
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+```bash
 # Terminal 1 — MCP forensic tool server
 python3 custom-agent/sift_server.py
 
