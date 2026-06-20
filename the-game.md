@@ -34,11 +34,13 @@ Also wrong sometimes. Doesn't know it's wrong.
 
 Runs concurrently against the raw memory dump. Volatility 3 only — process injection, VAD anomalies, credential artifacts invisible on disk. Surfaces the attack chain that never touched the filesystem. Adds its own findings to the list.
 
-**The Auditor** (`auditor_agent.py`)
+Also wrong sometimes. Memory surfaces a lot of noise.
 
-Receives only the findings list. Never sees either agent's reasoning. Never sees the evidence chain. Never sees how confident they sounded. Just the claims — a list of technique IDs and nothing else.
+**The Forensic Auditor** (auditor_agent.py)
 
-Has five rounds, two tool calls per round. Must call real forensic tools and read physical bytes off disk or out of memory. Returns one of three verdicts per finding:
+Receives only the findings list. Never sees the Disk Agent's reasoning. Never sees the Memory Agent's evidence chain. Never sees how confident either sounded. Just the claims — a list of technique IDs and nothing else.
+
+Has five rounds, three tool calls per round. Must call real forensic tools and read physical bytes off disk or out of memory. Returns one of three verdicts per finding:
 
 - **CONFIRMED** — positive tool return value. The artifact is there.
 - **REFUTED** — evidence of absence. The artifact is not where the technique requires it.
@@ -52,9 +54,9 @@ No other input is valid. Model confidence counts for nothing.
 
 The Disk Agent and Memory Agent can say anything.
 
-The Auditor can only say what the filesystem and memory prove.
+The Forensic Auditor can only say what the filesystem proves.
 
-A finding is only CONFIRMED when the Auditor calls a real forensic tool and reads physical bytes. The Auditor cannot ask either agent for clarification. Cannot see their reasoning chains. Cannot be influenced by how confident they sounded. This is structural isolation — a session boundary enforced in code, not a prompt instruction.
+A finding is only CONFIRMED when the Forensic Auditor calls a real forensic tool and reads physical bytes. The Forensic Auditor cannot ask either agent for clarification. Cannot see their reasoning chains. Cannot be influenced by how confident they sounded. This is structural isolation — a session boundary enforced in code, not a prompt instruction.
 
 **The MCP Validator Gate** enforces this at the subprocess level. Before any tool call executes, four gates run in Python:
 
@@ -96,10 +98,6 @@ The consistent pattern isn't the number — it's the class of signal. Memory ana
 
 On nfury, T1071.001 was flagged because the string `established` appeared in `windows.netscan` output. TCP state strings appear in memory regardless of whether any malicious connection is active. The Auditor ran `windows.netscan` and checked all 432 connection records. Every ESTABLISHED and CLOSE\_WAIT connection resolved to Apple, Microsoft, or Google CDN infrastructure. Returned REFUTED.
 
-That is not the Auditor being careful. That is the Auditor running out of connections to check because the actual network data didn't support the claim.
-
-Without the Auditor you ship 19 findings on nfury. Four of them are wrong. You don't know which four.
-
 ---
 
 ## The Self-Correction Case
@@ -108,17 +106,17 @@ T1071.001 — Application Layer Protocol: Web Protocols — is the canonical exa
 
 The Memory Agent flagged it. `windows.netscan` output contained the string `established` — a TCP state value — which matched the technique's detection signal. The Memory Agent's report marked T1071.001 as active C2 via web protocol. High signal.
 
-The Auditor received only the technique ID and a filesystem/memory hint. It had no access to the Memory Agent's reasoning or to the fact that the Memory Agent had already flagged this with apparent confidence.
+The Forensic Auditor received only the technique ID and a filesystem/memory hint. It had no access to the Memory Agent's reasoning or to the fact that the Memory Agent had already flagged this with apparent confidence.
 
-The Auditor ran `windows.netscan` independently and read all 432 connection records. Every `ESTABLISHED` and `CLOSE_WAIT` entry resolved to Apple, Microsoft, or Google CDN infrastructure. No active HTTP C2 connections anywhere in the connection table.
+The Forensic Auditor ran `windows.netscan` independently and read all 432 connection records. Every `ESTABLISHED` and `CLOSE_WAIT` entry resolved to Apple, Microsoft, or Google CDN infrastructure. No active HTTP C2 connections anywhere in the connection table.
 
 **Returned REFUTED.**
 
-This is not the Auditor being careful. This is the Auditor running out of connections to check because the actual network data did not support the claim. The architecture did not fail safely — it actively corrected a wrong answer that had already been written into the findings list.
+This is not the Forensic Auditor being careful. This is the Forensic Auditor running out of connections to check because the actual network data did not support the claim. The architecture did not fail safely — it actively corrected a wrong answer that had already been written into the findings list.
 
-Without the Auditor, T1071.001 would appear in the final report as a confirmed finding. It would describe active command-and-control infrastructure that does not exist. An analyst relying on that report would pursue a false lead.
+Without the Forensic Auditor, T1071.001 would appear in the final report as a confirmed finding. It would describe active command-and-control infrastructure that does not exist. An analyst relying on that report would pursue a false lead.
 
-The Memory Agent was not wrong to flag it. TCP state strings appear in any live Windows memory capture regardless of whether a malicious connection is active. The Memory Agent's job is to surface signals. The Auditor's job is to verify them against physical bytes. The architecture only works because these are structurally separate agents with separate tool sessions.
+The Memory Agent was not wrong to flag it. TCP state strings appear in any live Windows memory capture regardless of whether a malicious connection is active. The Memory Agent's job is to surface signals. The Forensic Auditor's job is to verify them against physical bytes. The architecture only works because these are structurally separate agents with separate tool sessions.
 
 ---
 
@@ -152,16 +150,16 @@ The IOC file contains no LLM reasoning, no confidence scores, no context from th
 
 ## What the Architecture Actually Does
 
-The Disk Agent and Memory Agent are unconstrained. Given a suspicious image and a mandate to find compromise, they will find something that looks like every technique on the ATT&CK matrix. Some findings will be real. Some will be memory noise. Some will be parser artifacts. They cannot tell the difference.
+The Disk Agent and Memory Agent are unconstrained. Given a suspicious disk image and a mandate to find compromise, they will find something that looks like every technique on the ATT&CK matrix. Some findings will be real. Some will be memory noise. Some will be parser artifacts. They cannot tell the difference.
 
-The Auditor is the constraint layer. It forces every finding back into physical reality before it enters the report.
+The Forensic Auditor is the constraint layer. It forces every finding back into physical reality before it enters the report.
 
 | | Findings shipped | Wrong findings | Cited to physical artifact |
 |---|---|---|---|
-| Without Auditor | 19 | 4 (unknown) | 0 |
-| With Auditor | 15 | 0 | 15 |
+| Without Forensic Auditor | 19 | 4 (unknown) | 0 |
+| With Forensic Auditor | 15 | 0 | 15 |
 
-The architecture doesn't make the Disk Agent or Memory Agent smarter. It makes their hallucinations structurally irrelevant to the final output.
+The architecture doesn't make the investigators smarter. It makes their hallucinations structurally irrelevant to the final output.
 
 ---
 
@@ -171,8 +169,9 @@ The architecture doesn't make the Disk Agent or Memory Agent smarter. It makes t
 # Full game — Disk Agent + Memory Agent investigate, Auditor verifies, HTML report written
 python3 custom-agent/investigate.py --case /cases/hostname
 
-# Explicit paths (disk must be pre-mounted via ewfmount)
-python3 custom-agent/investigate.py /mnt/hostname --memory /cases/hostname/mem.001
+# Full pipeline — Disk Agent + Memory Agent investigate, Forensic Auditor verifies, HTML report written
+python3 custom-agent/sift_server.py          # Terminal 1
+python3 custom-agent/investigate.py /mnt/hostname  # Terminal 2
 
 # Campaign mode — seed with confirmed IOCs from prior hosts
 python3 custom-agent/investigate.py --case ~/cases/tdungan nfury

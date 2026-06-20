@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# adversa.sh — VERITAS Investigation Framework
+# veritas.sh — VERITAS Investigation Framework
 #
 # Usage:
-#   ./adversa.sh /mnt/nfury
-#   ./adversa.sh --no-synthesis /mnt/controller
-#   ./adversa.sh --help
+#   ./veritas.sh /mnt/nfury
+#   ./veritas.sh --no-synthesis /mnt/controller
+#   ./veritas.sh --help
 #
 # If ANTHROPIC_API_KEY is not set, prompts securely.
 # Checks that the target mount point is non-empty before running.
@@ -28,19 +28,19 @@ echo ""
 # ── Help ──────────────────────────────────────────────────────────────────────
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     echo -e "  ${C}Usage:${N}"
-    echo "    ./adversa.sh [--no-synthesis] [--ioc-file PATH] <mount_path>"
+    echo "    ./veritas.sh [--no-synthesis] [--ioc-file PATH] <mount_path>"
     echo ""
     echo -e "  ${C}Examples:${N}"
-    echo "    ./adversa.sh /mnt/nfury"
-    echo "    ./adversa.sh --no-synthesis /mnt/controller    # fast, no LLM synthesis"
-    echo "    ./adversa.sh --ioc-file reports/host1-iocs.json /mnt/host2  # IOC correlation"
+    echo "    ./veritas.sh /mnt/nfury"
+    echo "    ./veritas.sh --no-synthesis /mnt/controller    # fast, no LLM synthesis"
+    echo "    ./veritas.sh --ioc-file reports/host1-iocs.json /mnt/host2  # IOC correlation"
     echo ""
     echo -e "  ${C}Multi-host campaign workflow:${N}"
-    echo "    ./adversa.sh /mnt/host1                        # step 1: baseline"
-    echo "    ./adversa.sh --ioc-file reports/host1-iocs.json /mnt/host2  # step 2"
-    echo "    ./adversa-merge-iocs.sh reports/host1-iocs.json reports/host2-iocs.json \\"
+    echo "    ./veritas.sh /mnt/host1                        # step 1: baseline"
+    echo "    ./veritas.sh --ioc-file reports/host1-iocs.json /mnt/host2  # step 2"
+    echo "    ./veritas-merge-iocs.sh reports/host1-iocs.json reports/host2-iocs.json \\"
     echo "        > reports/network1-campaign.json            # merge"
-    echo "    ./adversa.sh --ioc-file reports/network1-campaign.json /mnt/host3  # step 3"
+    echo "    ./veritas.sh --ioc-file reports/network1-campaign.json /mnt/host3  # step 3"
     echo ""
     echo -e "  ${C}Mount a disk image first:${N}"
     echo "    sudo ewfmount image.E01 /mnt/ewf_host"
@@ -84,7 +84,7 @@ while [[ $# -gt 0 ]]; do
             IOC_FILE="--ioc-file $2"; shift 2 ;;
         --*)
             echo -e "  ${R}Unknown option: $1${N}"
-            echo "  Run ./adversa.sh --help for usage."
+            echo "  Run ./veritas.sh --help for usage."
             exit 1
             ;;
         *) TARGET="$1"; shift ;;

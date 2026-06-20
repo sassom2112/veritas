@@ -42,17 +42,50 @@ Exactly 4 refutals per host across all four investigations. Every confirmed find
 
 ```bash
 git clone https://github.com/sassom2112/find-evil-2026.git
+cd find-evil-2026
+python3 -m venv forensics_env
+source forensics_env/bin/activate
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY="sk-ant-..."
-
-# Full investigation — auto-discovers disk mount + memory image
-python3 custom-agent/investigate.py --case /cases/hostname
-
-# Explicit paths (disk must be pre-mounted via ewfmount)
-python3 custom-agent/investigate.py /mnt/hostname --memory /cases/hostname/mem.001
 ```
 
-Requires a Windows disk image mounted read-only on a SANS SIFT Workstation.
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+```bash
+# Terminal 1 — MCP forensic tool server
+source forensics_env/bin/activate
+python3 custom-agent/sift_server.py
+```
+
+```bash
+# Terminal 2 — full investigation
+source forensics_env/bin/activate
+python3 custom-agent/investigate.py --case /mnt/hostname
+```
+
+```bash
+# Fast triage — no API key, < 10 seconds
+source forensics_env/bin/activate
+python3 fast-triage/fast_triage.py /mnt/hostname
+```
+
+Requires a Windows disk image mounted read-only on a SANS SIFT Workstation. The venv step is required on SIFT — Debian 12 blocks system-wide pip installs by default.
+
+### Campaign mode — multi-host investigation
+
+```bash
+# First host — baseline investigation
+python3 custom-agent/investigate.py --case ~/cases/nfury
+
+# Second host — seed with confirmed IOCs from first host
+python3 custom-agent/investigate.py --case ~/cases/tdungan nfury
+
+# Third host — all prior confirmed artifacts injected
+python3 custom-agent/investigate.py --case ~/cases/nromanoff nfury tdungan
+```
+
+Host names resolve to `reports/<host>-iocs.json`. Only Auditor-confirmed artifacts propagate — hallucinations that were refuted on the first host cannot contaminate the next investigation.
 
 ---
 

@@ -16,34 +16,40 @@ Three agents. Zero shared state. One rule: `CONFIRMED` requires a positive tool 
 *Layered security architecture — adversarial training signal through output management.*
 
 ```
-Mounted Disk Image (read-only)      Raw Memory Image (.001 / .raw)
-        |                                     |
-        v                                     v
+Mounted Disk Image (read-only)
+        |
+        v
++---------------------------+
+|    Deterministic Sweep    |  ~25 SIFT commands, no LLM, <60s
+|    (fast_triage.py)       |  corpus-calibrated signal weights
++---------------------------+
+        |
+        v
 +---------------------------+     +---------------------------+
 |    Disk Agent             |     |    Memory Agent           |
 |    (blue_agent.py)        |     |    (memory_agent.py)      |
-|    Pass 1: ~25 SIFT cmds  |     |    Volatility 3 plugins   |
-|    Pass 2: 75-call loop   |     |    Pass 2: agentic loop   |
-|    corpus-calibrated       |     |    VAD / injection / creds|
+|    75-call Claude budget  |     |    Volatility 3 parallel  |
+|    raw artifacts only     |     |    process injection,     |
+|    no scores, no labels   |     |    VAD anomalies,         |
+|                           |     |    credential dumps       |
 +---------------------------+     +---------------------------+
-        |                                     |
-        |  findings list only (technique IDs, nothing else)
-        +------------------------------+------+
-                                       v
-                        +---------------------------+
-                        |    Forensic Auditor       |  isolated MCP session
-                        |    (auditor_agent.py)     |  no shared state
-                        |                           |  mandate: assume false
-                        |                           |  5 rounds × 2 tool calls
-                        +---------------------------+
-                                       |
-                                       v
-                          CONFIRMED / REFUTED / INCONCLUSIVE
-                          + append-only audit log (audit_log.jsonl)
-                          + HTML report
+        |  findings list only          |
+        |  (technique IDs, nothing else)|
+        +------------------------------+
+        v
++---------------------------+
+|    Forensic Auditor       |  isolated MCP session, no shared state
+|    (auditor_agent.py)     |  mandate: assume every finding is false
+|                           |  5 rounds × 3 tool calls per technique
++---------------------------+
+        |
+        v
+  CONFIRMED / REFUTED / INCONCLUSIVE
+  + append-only audit log (audit_log.jsonl)
+  + HTML report
 ```
 
-**The structural guarantee:** The Auditor receives technique IDs and nothing else from the Disk and Memory Agent sessions. `CONFIRMED` requires a positive tool return value. Timeout returns `INCONCLUSIVE` — never `CONFIRMED`.
+**The structural guarantee:** The Auditor receives technique IDs and nothing else from the investigator sessions. `CONFIRMED` requires a positive tool return value. Timeout returns `INCONCLUSIVE` — never `CONFIRMED`.
 
 ---
 
@@ -94,9 +100,9 @@ The Forensic Auditor receives:
 
 The Forensic Auditor does **not** receive:
 - The Disk Agent's or Memory Agent's tool call history
-- Either agent's reasoning or analysis
+- Either investigator's reasoning or analysis
 - Confidence scores or weights
-- Any context from either investigation session
+- Any context from the investigator MCP sessions
 
 This is enforced by the code, not a prompt. Reading `auditor_agent.py` verifies the property.
 
@@ -121,9 +127,9 @@ The triage layer generates candidates for the Auditor. It is not the architectur
 
 | Component | What it does | Status |
 |-----------|-------------|--------|
-| `blue_agent.py` Pass 1 | ~25 SIFT commands, corpus-calibrated weights, <60s | Working |
+| `fast_triage.py` | ~25 SIFT commands, corpus-calibrated weights, <10s, no API key | POC |
 | `blue_agent.py` Pass 2 | 75-call Claude loop, raw artifacts only, no labels | Working |
-| `memory_agent.py` | Volatility 3 parallel path — process injection, VAD, creds | Working |
+| `memory_agent.py` | Volatility 3 parallel path | Working |
 | Corpus weights | Log-odds from 800+ MalwareBazaar/HybridAnalysis samples | POC, 9 MITRE techniques |
 
 The roadmap replaces corpus weights with a neural network trained against a validated benign baseline. The Auditor architecture is unchanged — any detection signal feeds the same verification layer.

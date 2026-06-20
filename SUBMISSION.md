@@ -44,8 +44,8 @@ Requires a Windows disk image mounted read-only at a path like `/mnt/hostname`.
 ## Full adversarial pipeline
 
 ```bash
-# Auto-discovers disk mount and memory image from case directory
-python3 custom-agent/investigate.py --case /cases/hostname
+# Terminal 1
+python3 custom-agent/sift_server.py
 
 # Explicit paths (disk must be pre-mounted via ewfmount)
 python3 custom-agent/investigate.py /mnt/hostname --memory /cases/hostname/mem.001
