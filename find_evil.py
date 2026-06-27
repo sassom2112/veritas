@@ -124,11 +124,9 @@ def cmd_triage(target: str) -> int:
 
 
 def cmd_investigate(target: str, no_synthesis: bool = False):
-    """Run blue_agent.py (two-pass investigation)."""
-    script = os.path.join(_AGENT, 'blue_agent.py')
-    cmd = [sys.executable, script, target]
-    if no_synthesis:
-        cmd.append('--no-synthesis')
+    """Run the full 3-phase pipeline: Disk Agent + Memory Agent → Forensic Auditor → HTML report."""
+    script = os.path.join(_AGENT, 'investigate.py')
+    cmd = [sys.executable, script, '--case', target]
     subprocess.run(cmd, cwd=_AGENT)
 
 
@@ -247,20 +245,8 @@ Examples:
         cmd_investigate(args.target, args.no_synthesis)
         return
 
-    # ── Default: full pipeline (triage → auto-escalate → investigate) ─────────
-    print("  ┌─ Phase 1/2  Fast Triage ─────────────────────────────────────┐")
-    score = cmd_triage(args.target)
-    print("  └──────────────────────────────────────────────────────────────┘\n")
-
-    if score >= 30:
-        print(f"  Triage score {score} ≥ 30 — auto-escalating to full investigation\n")
-        print("  ┌─ Phase 2/2  Two-Pass Agent Investigation ────────────────────┐")
-        cmd_investigate(args.target, args.no_synthesis)
-        print("  └──────────────────────────────────────────────────────────────┘")
-    else:
-        print(f"  Triage score {score} < 30 — no escalation needed")
-        host = os.path.basename(args.target.rstrip('/'))
-        print(f"  Report saved → reports/triage_{host}.json\n")
+    # ── Default: full pipeline — Disk Agent + Memory Agent → Forensic Auditor ──
+    cmd_investigate(args.target, args.no_synthesis)
 
 
 if __name__ == '__main__':

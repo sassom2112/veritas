@@ -7,7 +7,7 @@ permalink: /how-it-works
 # How VERITAS Works
 {: .fs-9 }
 
-Explained as a game.
+Three agents. One adversarial rule. Evidence or nothing.
 {: .fs-6 .fw-300 }
 
 ---
@@ -22,17 +22,17 @@ That's not a model quality problem. It's a structural property of any system whe
 
 ---
 
-## The Three Agents
+## The Three Players
 
-**The Disk Agent** (blue_agent.py)
+**The Disk Agent** (`blue_agent.py`)
 
-Goes through everything on disk. Event logs, prefetch files, registry hives, shellbags, network artifacts. Forms hypotheses. Builds a findings list. Fast, thorough, creative.
+Goes through everything on the disk image. Event logs, prefetch files, registry hives, network artifacts. Two passes: ~25 deterministic SIFT commands scored against corpus-calibrated weights, then a 75-call agentic loop that reasons from raw bytes only — no scores, no technique labels injected. Forms hypotheses. Builds a findings list. Fast, thorough, creative.
 
 Also wrong sometimes. Doesn't know it's wrong.
 
-**The Memory Agent** (memory_agent.py)
+**The Memory Agent** (`memory_agent.py`)
 
-Runs Volatility 3 in parallel. Process injection, VAD anomalies, credential dumps — artifacts that only exist in volatile memory. Produces its own findings list on a separate evidentiary layer.
+Runs concurrently against the raw memory dump. Volatility 3 only — process injection, VAD anomalies, credential artifacts invisible on disk. Surfaces the attack chain that never touched the filesystem. Adds its own findings to the list.
 
 Also wrong sometimes. Memory surfaces a lot of noise.
 
@@ -56,7 +56,7 @@ The Disk Agent and Memory Agent can say anything.
 
 The Forensic Auditor can only say what the filesystem proves.
 
-A finding is only CONFIRMED when the Forensic Auditor calls a real forensic tool and reads physical bytes. The Auditor cannot ask the Disk Agent for clarification. Cannot see its reasoning chain. Cannot be influenced by how confident it sounded. This is structural isolation — a session boundary enforced in code, not a prompt instruction.
+A finding is only CONFIRMED when the Forensic Auditor calls a real forensic tool and reads physical bytes. The Forensic Auditor cannot ask either agent for clarification. Cannot see their reasoning chains. Cannot be influenced by how confident they sounded. This is structural isolation — a session boundary enforced in code, not a prompt instruction.
 
 **The MCP Validator Gate** enforces this at the subprocess level. Before any tool call executes, four gates run in Python:
 
@@ -92,15 +92,31 @@ The refuted count happens to be 4 on each host. The refuted *techniques* are not
 
 Notice T1569.002 — PsExec lateral movement. On nfury, the Auditor found `psexesvc.exe` on disk and returned **CONFIRMED**. On tdungan, the Auditor checked and found no binary — returned **REFUTED**. Same technique. Two different hosts. Two different verdicts. The Auditor is making case-specific decisions based on what's actually on each disk, not running a fixed pattern.
 
-The consistent pattern isn't the number — it's the class of signal. Memory analysis against Windows 7 images tends to surface the same noise techniques (access token manipulation, hijack execution flow, run key persistence, active C2 connections) because these patterns appear in any live Windows memory image. The Auditor correctly dismisses them every time they lack disk corroboration.
+The consistent pattern isn't the number — it's the class of signal. Memory analysis against Windows 7 images tends to surface the same noise techniques (access token manipulation, hijack execution flow, run key persistence, active C2 connections) because these patterns appear in any live Windows memory image. The Auditor correctly dismisses them every time the Memory Agent's signal lacks corroborating disk evidence.
 
 **The refutals are the proof the game works.**
 
 On nfury, T1071.001 was flagged because the string `established` appeared in `windows.netscan` output. TCP state strings appear in memory regardless of whether any malicious connection is active. The Auditor ran `windows.netscan` and checked all 432 connection records. Every ESTABLISHED and CLOSE\_WAIT connection resolved to Apple, Microsoft, or Google CDN infrastructure. Returned REFUTED.
 
-That is not the Forensic Auditor being careful. That is the Forensic Auditor running out of connections to check because the actual network data didn't support the claim.
+---
 
-Without the Forensic Auditor you ship 19 findings on nfury. Four of them are wrong. You don't know which four.
+## The Self-Correction Case
+
+T1071.001 — Application Layer Protocol: Web Protocols — is the canonical example of the system catching and overriding its own investigator's output.
+
+The Memory Agent flagged it. `windows.netscan` output contained the string `established` — a TCP state value — which matched the technique's detection signal. The Memory Agent's report marked T1071.001 as active C2 via web protocol. High signal.
+
+The Forensic Auditor received only the technique ID and a filesystem/memory hint. It had no access to the Memory Agent's reasoning or to the fact that the Memory Agent had already flagged this with apparent confidence.
+
+The Forensic Auditor ran `windows.netscan` independently and read all 432 connection records. Every `ESTABLISHED` and `CLOSE_WAIT` entry resolved to Apple, Microsoft, or Google CDN infrastructure. No active HTTP C2 connections anywhere in the connection table.
+
+**Returned REFUTED.**
+
+This is not the Forensic Auditor being careful. This is the Forensic Auditor running out of connections to check because the actual network data did not support the claim. The architecture did not fail safely — it actively corrected a wrong answer that had already been written into the findings list.
+
+Without the Forensic Auditor, T1071.001 would appear in the final report as a confirmed finding. It would describe active command-and-control infrastructure that does not exist. An analyst relying on that report would pursue a false lead.
+
+The Memory Agent was not wrong to flag it. TCP state strings appear in any live Windows memory capture regardless of whether a malicious connection is active. The Memory Agent's job is to surface signals. The Forensic Auditor's job is to verify them against physical bytes. The architecture only works because these are structurally separate agents with separate tool sessions.
 
 ---
 
@@ -110,7 +126,7 @@ rocba is the C2 relay node. Zero disk artifacts by design — no persistence, no
 
 The Auditor found one thing: T1055 in `MsMpEng.exe` — Windows Defender's own engine. Two anonymous `PAGE_EXECUTE_READWRITE` memory regions with an x64 shellcode dispatch trampoline. The attacker injected into their own AV to hide C2 traffic inside a trusted process.
 
-In Round 1, `windows.malfind` timed out. The Auditor returned INCONCLUSIVE — not CONFIRMED. Timeout does not produce a confirmed finding. The game fails safe.
+In Round 1, `windows.malfind` timed out. The Auditor returned INCONCLUSIVE — not CONFIRMED. Timeout does not produce a confirmed finding. The architecture fails safe.
 
 In Round 2, it recovered one VAD record before the timeout and returned CONFIRMED.
 
@@ -120,7 +136,7 @@ The architecture works on hosts that are specifically designed to defeat forensi
 
 ## Campaign Mode — The Meta-Game
 
-After nfury is solved, confirmed IOCs go into a file. SHA-256 hashes. C2 addresses. Account names. Only confirmed artifacts — nothing the Cynic rejected.
+After nfury is solved, confirmed IOCs go into a file. SHA-256 hashes. C2 addresses. Account names. Only confirmed artifacts — nothing the Auditor rejected.
 
 When tdungan is investigated, the Disk Agent loads that file and hunts specifically for those artifacts. Not general search. Directed investigation seeded by physically verified prior findings.
 
@@ -150,8 +166,8 @@ The architecture doesn't make the investigators smarter. It makes their hallucin
 ## How to Run the Game
 
 ```bash
-# Fast triage — no API key, < 10 seconds, decides if the image is worth $14
-python3 fast-triage/fast_triage.py /mnt/hostname
+# Full game — Disk Agent + Memory Agent investigate, Auditor verifies, HTML report written
+python3 custom-agent/investigate.py --case /cases/hostname
 
 # Full pipeline — Disk Agent + Memory Agent investigate, Forensic Auditor verifies, HTML report written
 python3 custom-agent/sift_server.py          # Terminal 1

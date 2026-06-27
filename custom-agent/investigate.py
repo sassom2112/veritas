@@ -2,7 +2,7 @@
 """
 investigate.py -- VERITAS Investigation Orchestrator
 
-Sequences: Triage Agent -> Forensic Auditor -> Unified Report
+Sequences: Disk Agent + Memory Agent -> Forensic Auditor -> Unified Report
 Both phases always run. The Auditor is not optional.
 
 Usage — case directory (auto-discovers disk mount + memory):
@@ -31,6 +31,8 @@ from datetime import datetime, timezone
 _HERE    = os.path.dirname(os.path.abspath(__file__))
 _REPORTS = os.path.normpath(os.path.join(_HERE, '..', 'reports'))
 
+TARGET_MAX_COST_USD = 20.0   # abort Phase 3 if Phase 1+2 already exceeded this
+
 # VERITAS case_io — writes auditor findings as DRAFT for human approval
 sys.path.insert(0, os.path.normpath(os.path.join(_HERE, '..', 'src')))
 try:
@@ -44,7 +46,11 @@ sys.path.insert(0, _HERE)
 import blue_agent
 import memory_agent
 from auditor_agent import ForensicAuditor
-from contracts import AuditResult, TriageHandoff
+from contracts import AuditResult, FinalTechniqueResult, TriageHandoff
+from cross_verifier import CrossVerifier, adjudicate
+from disk_agent import DiskAgent
+from metrics import Metrics
+from verifier import verify_same_layer
 from extract_iocs import extract_iocs, merge_iocs
 from html_report import generate_report
 
@@ -108,6 +114,170 @@ def _resolve_campaign_iocs(hosts_or_paths: list, reports_dir: str) -> dict | Non
 
 # ── Main orchestration loop ────────────────────────────────────────────────
 
+async def run_cross_layer(
+    target_path: str,
+    memory_path: str | None = None,
+    ioc_data: dict | None = None,
+) -> dict:
+    """
+    Cross-layer investigation pipeline (future/cross-layer-verification branch).
+
+    Architecture:
+      1. DiskAgent and memory_agent.investigate_layered() run in parallel
+         with disjoint tool grants (VERITAS_LAYER=disk / VERITAS_LAYER=memory).
+      2. Same-layer blind replication (PRIMARY GATE): fresh sessions per claim,
+         same layer's tools, receives tool_output + artifact_hint only — no reasoning.
+      3. Cross-layer corroboration (BONUS): CONFIRMED claims only, opposite layer.
+         Disk claims → memory verifier.  Memory claims → disk verifier.
+      4. Adjudication: same-layer drives verdict, cross-layer annotates.
+         HIGH_CONFIRMED | CONFIRMED | DISPUTED | REFUTED | INCONCLUSIVE.
+    """
+    from memory_agent import investigate_layered as mem_investigate_layered
+
+    host    = os.path.basename(target_path.rstrip('/'))
+    started = datetime.now(timezone.utc)
+    metrics = Metrics()
+
+    print(f"\n{'═'*60}")
+    print(f"  VERITAS CROSS-LAYER INVESTIGATION")
+    print(f"  Target:   {target_path}")
+    if memory_path:
+        print(f"  Memory:   {memory_path}")
+    print(f"  Started:  {started.strftime('%Y-%m-%dT%H:%M:%SZ')}")
+    print(f"{'═'*60}")
+
+    # ── Phase 1: Parallel disjoint-grant investigation ─────────────────────
+    print(f"\n{'━'*60}")
+    print(f"  PHASE 1  —  PARALLEL INVESTIGATION  (disjoint tool grants)")
+    print(f"{'━'*60}")
+
+    metrics.start_phase('phase_1_disk')
+    metrics.start_phase('phase_1_memory')
+    disk_task = DiskAgent().investigate(target_path, ioc_data=ioc_data)
+    if memory_path:
+        mem_task  = mem_investigate_layered(memory_path, host=host)
+        (disk_claims, memory_claims) = await asyncio.gather(disk_task, mem_task)
+    else:
+        disk_claims  = await disk_task
+        memory_claims = []
+    metrics.end_phase('phase_1_disk')
+    metrics.end_phase('phase_1_memory')
+
+    print(f"\n  Phase 1 complete: {len(disk_claims)} disk claims, "
+          f"{len(memory_claims)} memory claims")
+
+    # ── Phase 2: Same-layer blind replication (PRIMARY GATE) ──────────────
+    all_claims = disk_claims + memory_claims
+    metrics.start_phase('phase_2_verify')
+    same_layer_verdicts = await verify_same_layer(all_claims, target_path, memory_path, metrics)
+    metrics.end_phase('phase_2_verify')
+
+    same_verdict_map = {v['technique_id']: v for v in same_layer_verdicts}
+    confirmed_disk   = [c for c in disk_claims
+                        if same_verdict_map.get(c['technique_id'], {}).get('verdict') == 'CONFIRMED']
+    confirmed_memory = [c for c in memory_claims
+                        if same_verdict_map.get(c['technique_id'], {}).get('verdict') == 'CONFIRMED']
+
+    phase_2_cost = metrics.total_cost_usd()
+    print(f"\n  Phase 2 gate: {len(confirmed_disk)} disk / {len(confirmed_memory)} memory pass to Phase 3")
+    print(f"  Phase 2 cost so far: ${phase_2_cost:.4f}")
+
+    # ── Cost ceiling gate — abort Phase 3 if already over budget ──────────
+    if phase_2_cost > TARGET_MAX_COST_USD:
+        print(f"\n  COST CEILING REACHED (${phase_2_cost:.2f} > ${TARGET_MAX_COST_USD:.2f})")
+        print(f"  Skipping Phase 3. Cross-layer corroboration set to NO_VISIBILITY.")
+        disk_verdicts   = []
+        memory_verdicts = []
+    else:
+        # ── Phase 3: Cross-layer corroboration (CONFIRMED claims only) ─────
+        print(f"\n{'━'*60}")
+        print(f"  PHASE 3  —  CROSS-LAYER CORROBORATION")
+        print(f"  Confirmed disk → memory verifier | Confirmed memory → disk verifier")
+        print(f"{'━'*60}")
+
+        metrics.start_phase('phase_3_cross')
+        disk_verdicts, memory_verdicts = await CrossVerifier().verify_all(
+            confirmed_disk, confirmed_memory, target_path, memory_path, metrics
+        )
+        metrics.end_phase('phase_3_cross')
+
+    # ── Phase 4: Adjudication and report ───────────────────────────────────
+    print(f"\n{'━'*60}")
+    print(f"  PHASE 4  —  ADJUDICATION")
+    print(f"{'━'*60}")
+
+    results = adjudicate(same_layer_verdicts, disk_claims, memory_claims,
+                         disk_verdicts, memory_verdicts)
+
+    elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+
+    high_confirmed = [r for r in results if r['final'] == 'HIGH_CONFIRMED']
+    confirmed      = [r for r in results if r['final'] == 'CONFIRMED']
+    disputed       = [r for r in results if r['final'] == 'DISPUTED']
+    refuted        = [r for r in results if r['final'] == 'REFUTED']
+    inconclusive   = [r for r in results if r['final'] == 'INCONCLUSIVE']
+
+    if high_confirmed:
+        print(f"\n  HIGH_CONFIRMED (same-layer + cross-layer corroborated): {len(high_confirmed)}")
+        for r in high_confirmed:
+            print(f"    {r['technique_id']}  [{r['source_layer']}]  {(r['citation'] or '')[:50]}")
+    print(f"  CONFIRMED (same-layer verified, no cross-layer visibility): {len(confirmed)}")
+    for r in confirmed:
+        print(f"    {r['technique_id']}  [{r['source_layer']}]")
+    if disputed:
+        print(f"  DISPUTED (same-layer confirmed, cross-layer contradicted): {len(disputed)}")
+        for r in disputed:
+            print(f"    {r['technique_id']}  *** HUMAN REVIEW REQUIRED ***")
+    print(f"  REFUTED (same-layer found contradicting evidence): {len(refuted)}")
+    print(f"  INCONCLUSIVE (same-layer insufficient visibility): {len(inconclusive)}")
+
+    unified = {
+        'generated':       datetime.now(timezone.utc).isoformat(),
+        'target':          target_path,
+        'memory_path':     memory_path,
+        'pipeline':        'cross-layer-verification',
+        'elapsed_s':       round(elapsed, 1),
+        'disk_claims':     len(disk_claims),
+        'memory_claims':   len(memory_claims),
+        'high_confirmed':  [r['technique_id'] for r in high_confirmed],
+        'confirmed':       [r['technique_id'] for r in confirmed],
+        'disputed':        [r['technique_id'] for r in disputed],
+        'refuted':         [r['technique_id'] for r in refuted],
+        'inconclusive':    [r['technique_id'] for r in inconclusive],
+        'results':         list(results),
+    }
+
+    path = os.path.join(_REPORTS, f'{host}-cross-layer-investigation.json')
+    os.makedirs(_REPORTS, exist_ok=True)
+    with open(path, 'w') as f:
+        json.dump(unified, f, indent=2)
+
+    verdicts_summary = {
+        'HIGH_CONFIRMED': len(high_confirmed),
+        'CONFIRMED':      len(confirmed),
+        'DISPUTED':       len(disputed),
+        'REFUTED':        len(refuted),
+        'INCONCLUSIVE':   len(inconclusive),
+    }
+    manifest = metrics.to_dict(case_id=host, host=host, verdicts_summary=verdicts_summary)
+    manifest_path = os.path.join(_REPORTS, f'{host}-audit-manifest.json')
+    with open(manifest_path, 'w') as f:
+        json.dump(manifest, f, indent=2)
+    print(f"  Manifest:        {manifest_path}  (${manifest['total_cost_usd']:.4f} total)")
+
+    print(f"\n{'═'*60}")
+    print(f"  CROSS-LAYER INVESTIGATION COMPLETE  ({elapsed:.0f}s)")
+    print(f"  High confirmed:  {len(high_confirmed)}")
+    print(f"  Confirmed:       {len(confirmed)}")
+    print(f"  Disputed:        {len(disputed)}")
+    print(f"  Refuted:         {len(refuted)}")
+    print(f"  Inconclusive:    {len(inconclusive)}")
+    print(f"  Report:          {path}")
+    print(f"{'═'*60}\n")
+
+    return unified
+
+
 async def run_investigation(target_path: str,
                             ioc_data: dict = None,
                             memory_path: str = None) -> dict:
@@ -128,7 +298,7 @@ async def run_investigation(target_path: str,
     print(f"  Started:    {started.strftime('%Y-%m-%dT%H:%M:%SZ')}")
     print(f"{'═'*60}")
 
-    # ── Phase 1: Triage Agent (disk) + Memory Agent — parallel ────────────
+    # ── Phase 1: Disk Agent + Memory Agent — parallel ─────────────────────
     rules = blue_agent.load_operational_rules()
 
     if memory_path:
@@ -428,6 +598,10 @@ Examples:
     parser.add_argument('--case', metavar='CASE_DIR',
                         help='Case directory — auto-discovers disk mount and '
                              'memory image (e.g. /cases/nfury)')
+    parser.add_argument('--cross-layer', action='store_true',
+                        help='Cross-layer verification pipeline: disjoint tool grants, '
+                             'each layer verifies the other. Produces CONFIRMED | '
+                             'SINGLE_SOURCE | DISPUTED verdicts.')
 
     # ── Explicit mode (advanced) ─────────────────────────────────────────────
     parser.add_argument('target', nargs='?',
@@ -470,7 +644,10 @@ Examples:
 
         ioc_data = _resolve_campaign_iocs(args.campaign, _REPORTS)
         os.environ['BLUE_TARGET'] = disk_mount
-        asyncio.run(run_investigation(disk_mount, memory_path=memory_path, ioc_data=ioc_data))
+        if args.cross_layer:
+            asyncio.run(run_cross_layer(disk_mount, memory_path=memory_path, ioc_data=ioc_data))
+        else:
+            asyncio.run(run_investigation(disk_mount, memory_path=memory_path, ioc_data=ioc_data))
         return
 
     # ── Explicit mode ────────────────────────────────────────────────────────
@@ -489,7 +666,10 @@ Examples:
     ioc_data = _resolve_campaign_iocs(args.campaign, _REPORTS)
 
     os.environ['BLUE_TARGET'] = args.target
-    asyncio.run(run_investigation(args.target, memory_path=args.memory, ioc_data=ioc_data))
+    if args.cross_layer:
+        asyncio.run(run_cross_layer(args.target, memory_path=args.memory, ioc_data=ioc_data))
+    else:
+        asyncio.run(run_investigation(args.target, memory_path=args.memory, ioc_data=ioc_data))
 
 
 if __name__ == '__main__':

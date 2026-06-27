@@ -823,7 +823,7 @@ Never list a technique without citing the raw evidence that supports it. No spec
 
 
 async def main():
-    parser = argparse.ArgumentParser(description='ASL-trained forensic triage agent')
+    parser = argparse.ArgumentParser(description='ASL-trained Disk Agent — corpus-calibrated forensic investigation')
     parser.add_argument('target', nargs='?', default='/mnt/nromanoff',
                         help='Mounted image path (e.g. /mnt/nfury)')
     parser.add_argument('--no-synthesis', action='store_true',

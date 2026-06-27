@@ -2,7 +2,7 @@
 """
 auditor_agent.py -- The Forensic Auditor
 
-Challenges every Triage Agent finding with bounded MCP tool calls.
+Challenges every Disk Agent and Memory Agent finding with bounded MCP tool calls.
 Produces a timestamped argumentation transcript used as the primary
 submission artifact.
 
@@ -23,6 +23,7 @@ Called programmatically from investigate.py after blue_agent.py.
 import anthropic
 import argparse
 import asyncio
+import glob
 import json
 import logging
 import os
@@ -37,15 +38,31 @@ logging.getLogger('mcp').setLevel(logging.WARNING)
 
 _HERE    = os.path.dirname(os.path.abspath(__file__))
 _REPORTS = os.path.normpath(os.path.join(_HERE, '..', 'reports'))
+_SKILLS  = os.path.normpath(os.path.join(_HERE, '..', 'skills'))
 
 MAX_CHALLENGES_PER_FINDING = 5   # raised from 3 — prevents budget_exhausted on T1055/T1134/T1547
 MAX_TOOLS_PER_CHALLENGE    = 3   # raised from 2 — allows richer per-round verification
 
+
+def _load_skill(technique_id: str) -> str:
+    """Return the technique playbook for technique_id, or empty string if none exists.
+
+    Matches skills/{technique_id}-*.md — the first glob hit wins.
+    Playbook is injected into the challenge message, not the system prompt,
+    so it only consumes tokens for the technique currently being challenged.
+    """
+    matches = glob.glob(os.path.join(_SKILLS, f'{technique_id}-*.md'))
+    if not matches:
+        return ''
+    with open(matches[0]) as f:
+        return f.read()
+
+
 _AUDITOR_SYSTEM = """\
 You are The Forensic Auditor — a second-opinion agent in a digital
-forensics investigation. The Triage Agent has flagged ATT&CK techniques.
+forensics investigation. The Disk Agent and Memory Agent have flagged ATT&CK techniques.
 Your job is to independently verify each finding using raw SIFT forensic
-tool output — not the typed tool summaries the Triage Agent already produced.
+tool output — not the investigation summaries already produced.
 
 Rules:
 1. String-match alone is not proof. Find the definitive physical artifact.
@@ -76,7 +93,7 @@ Rules:
 5. End every response with exactly: VERDICT: <CONFIRMED|REFUTED|INCONCLUSIVE>
 6. Be specific — cite the exact artifact path or registry value you found.
    Reference the Attack Chain step number (e.g. "Step 3") when your finding
-   confirms or refutes a specific row in the Triage Agent's Attack Chain table.
+   confirms or refutes a specific row in the Attack Chain table.
 7. Write in plain prose. One short paragraph per verdict. No extra headers.
 
 KNOWN FORENSIC / IR TOOLS — do not attribute to attacker without corroborating evidence:
@@ -94,6 +111,10 @@ When EventID 7045 (service install) or a kernel driver involves one of these too
     C2, or performing clearly attacker-style actions.
 This applies equally to disk persistence (T1547.008, T1569.002) and memory-resident
 drivers found via vol.py svcscan — IR tools appear in both domains.
+
+When a TECHNIQUE PLAYBOOK is provided in the challenge message, follow its tool sequence
+and CONFIRMED/REFUTED criteria precisely. The playbook overrides generic guidance for
+that technique.
 """
 
 _TECHNIQUE_NAMES = {
@@ -444,6 +465,9 @@ class ForensicAuditor:
         else:
             p2_block = ""
 
+        skill_content = _load_skill(finding_id)
+        skill_block = f"\n\nTECHNIQUE PLAYBOOK:\n{skill_content}" if skill_content else ""
+
         messages = [{
             'role': 'user',
             'content': (
@@ -453,7 +477,8 @@ class ForensicAuditor:
                 f"Triage matched signals: {triage_signals}\n"
                 f"Signal tier: {signal_tier}. {tier_guidance}\n"
                 f"{source_guidance}"
-                f"{p2_block}\n"
+                f"{p2_block}"
+                f"{skill_block}\n"
                 f"Prior challenge rounds:\n{prior_summary}\n\n"
                 f"Challenge this finding with run_terminal_command. "
                 f"Use vol.py for memory artifacts, SIFT commands for disk artifacts. "

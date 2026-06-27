@@ -126,11 +126,11 @@ y = PAGE_H - TH - 7
 # ══════════════════════════════════════════════════════════════════════════════
 y = sec_header(c, L_MARGIN, y, COL_W, "ANTI-HALLUCINATION TRUST CHAIN")
 
-# ── Triage Agent ──────────────────────────────────────────────────────────────
+# ── Disk Agent + Memory Agent ─────────────────────────────────────────────────
 BH = 80
 rbox(c, L_MARGIN, y - BH, COL_W, BH, BLUE_BG, BLUE_FG, lw=1.5)
 ty = y - 10
-ct(c, COL_CX, ty,  "Phase 1 — Triage Agent  (blue_agent.py)", 'Helvetica-Bold', 8.5, BLUE_FG)
+ct(c, COL_CX, ty,  "Phase 1 — Disk Agent + Memory Agent  (blue_agent.py + memory_agent.py)", 'Helvetica-Bold', 8.5, BLUE_FG)
 ty -= 12
 ct(c, COL_CX, ty,  "Pass 1: ~25 deterministic SIFT commands · ASL detection scoring", 'Helvetica', 7, DRK_FG)
 ty -= 10
@@ -144,8 +144,8 @@ triage_top = y
 triage_bot = y - BH
 callout(c, COL_CX, triage_bot + BH/2, "Hallucination Risk",
         ["LLM confidence ≠ physical evidence",
-         "controller: Triage raw score 145",
-         "(uncapped) — Auditor refuted 2 of 3"])
+         "nfury: 19 techniques investigated",
+         "Auditor confirmed 15, refuted 4"])
 
 arrow_down(c, COL_CX, triage_bot, triage_bot - ARROW_GAP, BLUE_FG)
 y = triage_bot - ARROW_GAP - 1
@@ -154,7 +154,7 @@ y = triage_bot - ARROW_GAP - 1
 IBH = 34
 rbox(c, L_MARGIN, y - IBH, COL_W, IBH, GRAY_BG, GRAY_FG, lw=0.9, dashed=True)
 ct(c, COL_CX, y - IBH/2 + 5,  "Independence Barrier", 'Helvetica-Bold', 7.5, DRK_FG)
-ct(c, COL_CX, y - IBH/2 - 4,  "Auditor receives only {technique_id, score, filepath} — Triage reasoning chain and tool outputs stripped", 'Helvetica', 6, GRAY_FG)
+ct(c, COL_CX, y - IBH/2 - 4,  "Auditor receives only {technique_id} — investigation reasoning chain and tool outputs stripped", 'Helvetica', 6, GRAY_FG)
 ct(c, COL_CX, y - IBH/2 - 13, "No shared context.   No shared model state.", 'Helvetica', 6, GRAY_FG)
 barrier_bot = y - IBH
 
@@ -167,7 +167,7 @@ rbox(c, L_MARGIN, y - ABH, COL_W, ABH, ORG_BG, ORG_FG, lw=1.5)
 ay = y - 10
 ct(c, COL_CX, ay,  "Phase 2 — Forensic Auditor  (auditor_agent.py)", 'Helvetica-Bold', 8.5, ORG_FG)
 ay -= 12
-ct(c, COL_CX, ay,  "asyncio.gather · 3 verification rounds × 2 independent tool calls per technique", 'Helvetica', 7, DRK_FG)
+ct(c, COL_CX, ay,  "asyncio.gather · 5 verification rounds × 2 independent tool calls per technique", 'Helvetica', 7, DRK_FG)
 ay -= 10
 ct(c, COL_CX, ay,  "Re-executes SIFT commands from scratch · demands physical bytes on disk", 'Helvetica', 7, DRK_FG)
 ay -= 12
@@ -187,7 +187,7 @@ p = c.beginPath()
 p.moveTo(ar, lm-16); p.lineTo(ar+8, lm-12); p.lineTo(ar+8, lm-20); p.close()
 c.drawPath(p, fill=1, stroke=0)
 c.setFont('Helvetica-Oblique', 5.5); c.setFillColor(GRAY_FG)
-c.drawCentredString(ar+24, lm, "3 rounds")
+c.drawCentredString(ar+24, lm, "5 rounds")
 
 arrow_down(c, COL_CX, aud_bot, aud_bot - ARROW_GAP, ORG_FG)
 y = aud_bot - ARROW_GAP - 1
@@ -226,12 +226,11 @@ c.setFont('Helvetica', 6.5); c.setFillColor(GRAY_FG)
 c.drawString(L_MARGIN + 20, vy, "→  dropped from all outputs")
 
 vrd_bot = y - VBH
-callout(c, COL_CX, vrd_bot + VBH/2, "Live Result",
-        ["controller host",
-         "Triage raw: 145 pts (3 techniques)",
-         "Auditor refuted: 2",
-         "Final score: 50 pts",
-         "Zero false accusations"])
+callout(c, COL_CX, vrd_bot + VBH/2, "Live Result — nfury",
+        ["19 techniques investigated",
+         "15 confirmed · 4 refuted",
+         "Every finding: physical artifact cited",
+         "Runtime: 16 min · Cost: $14"])
 
 arrow_down(c, COL_CX, vrd_bot, vrd_bot - ARROW_GAP, GRAY_FG)
 y = vrd_bot - ARROW_GAP - 1

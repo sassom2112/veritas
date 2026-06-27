@@ -47,11 +47,11 @@ Requires a Windows disk image mounted read-only at a path like `/mnt/hostname`.
 # Terminal 1
 python3 custom-agent/sift_server.py
 
-# Terminal 2
-python3 custom-agent/investigate.py /mnt/hostname
+# Explicit paths (disk must be pre-mounted via ewfmount)
+python3 custom-agent/investigate.py /mnt/hostname --memory /cases/hostname/mem.001
 ```
 
-Runs Triage → Auditor → HTML report.
+Runs Disk Agent + Memory Agent (parallel) → Forensic Auditor → HTML report.
 
 **Campaign mode** — declare prior hosts explicitly to propagate confirmed IOCs:
 

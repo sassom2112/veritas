@@ -78,15 +78,15 @@ not there, the technique is refuted. No amount of model confidence
 changes that.
 
 That is the adversarial dynamic in VERITAS: not Red vs.\ Blue in
-training, but Optimist vs.\ Cynic in investigation. The Triage Agent
-proposes. The Forensic Auditor demands proof.
+training, but Investigator vs.\ Auditor in investigation. The Disk Agent
+and Memory Agent investigate. The Forensic Auditor demands proof.
 
 \section{What It Does}
 
 VERITAS investigates any mounted Windows forensic image through a
 three-phase pipeline, fully autonomous from invocation to HTML report.
 
-\textbf{Phase 1 — Deterministic triage.} A Triage Agent dispatches
+\textbf{Phase 1 — Deterministic triage.} The Disk Agent dispatches
 approximately 25 generic SIFT commands in under 60 seconds---no LLM,
 no case-specific assumptions---and scores the image against
 corpus-calibrated signal weights across 9 MITRE ATT\&CK techniques.
@@ -102,7 +102,7 @@ log content, prefetch binary parsing, shellbags, SAM/SECURITY hive
 extraction, hash verification. It cannot re-run what Pass~1 already
 covered; every call advances the investigation into new territory.
 
-\textbf{Phase 3 — Forensic Auditor.} After the Triage Agent completes,
+\textbf{Phase 3 — Forensic Auditor.} After investigation completes,
 the Forensic Auditor challenges every detected technique in parallel
 (\texttt{asyncio.gather}), running up to five rounds of two tool calls
 each. The rule is simple: identify the artifact that \emph{must}
@@ -154,7 +154,7 @@ with a traceable source sample.
 The hardest engineering problem was the validator rejecting legitimate
 forensic commands. The first version used a regex to split on \texttt{|}
 and checked each segment's leading binary against the allowlist. The
-first time the Triage Agent ran \texttt{grep -iE '(http|https|ftp)'},
+first time the Disk Agent ran \texttt{grep -iE '(http|https|ftp)'},
 the validator split it into three segments and rejected \texttt{https}
 as an unlisted binary. Fixing this required a quote-aware parser that
 tracks single-quoted substrings and correctly identifies \texttt{|} inside
@@ -178,10 +178,22 @@ nfury: T1003.001 confirmed with \texttt{hydrakatz.exe} found on disk and
 hash-verified; T1087.001 confirmed via SAM hive analysis. Score 95, no
 false positives.
 
-controller: Triage score 145 reduced to 50 by the Auditor. Two false
-positives refuted on physical evidence---the exact distinction between
+nfury: 19 techniques investigated, 15 confirmed, 4 refuted by the Auditor. Four
+false positives refuted on physical evidence---the exact distinction between
 ``this binary exists in a legitimate Windows location'' and ``this binary
-was placed there by an attacker.'' One technique confirmed:
+was placed there by an attacker.''
+
+\textbf{Self-correction --- T1071.001.} The Memory Agent flagged active C2
+via web protocol: the TCP state string \texttt{established} appeared in
+\texttt{windows.netscan} output, a valid memory signal. The Auditor received
+no context from the Memory Agent. It ran \texttt{windows.netscan}
+independently and read all 432 connection records. Every \texttt{ESTABLISHED}
+and \texttt{CLOSE\_WAIT} entry resolved to Apple, Microsoft, or Google CDN
+infrastructure. Zero active HTTP C2 connections. \textbf{Returned
+\textsc{Refuted}.} The system overrode its own investigator's output based
+on what memory actually contained. This is the architecture doing its job:
+structural separation ensures that investigator confidence cannot propagate
+into the final report without independent physical verification. One technique confirmed:
 \texttt{procdump.exe} in \texttt{/Tools/SysInternals/} and
 \texttt{spinlock.exe} in the WER ReportQueue crash dump, confirming the
 implant executed on this machine.

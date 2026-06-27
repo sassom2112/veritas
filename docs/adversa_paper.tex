@@ -79,7 +79,7 @@ verification problem remains open.
 
 VERITAS builds on Valhuntir's investigation layer and adds the missing piece: an
 independent verification agent that sits between the investigation output and the
-final report. The Triage Agent investigates---calling real SIFT tools, reading
+final report. The Disk Agent investigates---calling real SIFT tools, reading
 real disk artifacts---exactly as Valhuntir's approach does. The Forensic Auditor
 verifies. The human examiner reviews confirmed, artifact-backed findings instead
 of raw LLM output. The verification problem that Valhuntir left open by design
@@ -116,8 +116,8 @@ layer rather than replacing it.
 Du et al.~\cite{du2023debate} showed that having multiple LLM instances debate a
 claim improves factual accuracy over single-agent reasoning. VERITAS applies a
 stronger version of this principle to a higher-stakes property: not factual
-improvement but forensic verifiability. The Auditor does not debate the Triage
-Agent---it independently calls real forensic tools and requires a positive return
+improvement but forensic verifiability. The Auditor does not debate the investigating
+agents---it independently calls real forensic tools and requires a positive return
 value before issuing \textsc{confirmed}. Disagreement between agents is not the
 goal; structural impossibility of hallucinated confirmation is.
 
@@ -175,10 +175,10 @@ The third phase---the Forensic Auditor---is the contribution.
   gate/.style    = {box, fill=orange!15, minimum width=4.8cm},
   arr/.style     = {-Stealth, thick},
 ]
-  \node[agent]   (disk)    {Deterministic\\Sweep\\(\texttt{fast\_triage.py})};
-  \node[agent,   right=of disk]   (agent)   {Triage Agent\\75 tool calls\\(\texttt{blue\_agent.py})};
-  \node[agent,   below=1.2cm of agent] (mem)    {Memory Analysis\\Volatility~3\\(\texttt{memory\_agent.py})};
-  \node[auditor, right=of agent]  (auditor) {\textbf{Forensic Auditor}\\The Cynic\\(\texttt{auditor\_agent.py})};
+  \node[agent]   (disk)    {Deterministic\\Sweep\\(\texttt{blue\_agent.py}\ Pass\ 1)};
+  \node[agent,   right=of disk]   (agent)   {Disk Agent\\75 tool calls\\(\texttt{blue\_agent.py})};
+  \node[agent,   below=1.2cm of agent] (mem)    {Memory Agent\\Volatility~3\\(\texttt{memory\_agent.py})};
+  \node[auditor, right=of agent]  (auditor) {\textbf{Forensic Auditor}\\(\texttt{auditor\_agent.py})};
   \node[store,   right=of auditor](log)     {Audit Log\\(\texttt{audit\_log.jsonl})};
   \node[gate,    below=1.8cm of auditor] (gate) {MCP Validator Gate\\4 gates --- architectural enforcement};
 
@@ -246,10 +246,10 @@ starting point. The Auditor is what produces trusted output.
 
 After investigation completes, the Forensic Auditor challenges every detected
 technique in parallel via \texttt{asyncio.gather}. Each technique runs in its own
-isolated MCP session with no shared state from the Triage Agent.
+isolated MCP session with no shared state from the investigating agents.
 
 \textbf{Input.} A JSON list of technique identifiers. Nothing else. No reasoning
-traces, no confidence scores, no raw session context from the Triage Agent.
+traces, no confidence scores, no raw session context from the Disk or Memory Agent.
 
 \textbf{Mandate.} Assume every finding is false until the filesystem proves
 otherwise.

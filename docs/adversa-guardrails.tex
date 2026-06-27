@@ -37,18 +37,18 @@
     %% ═══════════════════════════════════════════════════════
 
     \node (triage) [layer=blue!8, draw=blue!70!black] {
-        \textbf{Phase 1 — Triage Agent} \small(\texttt{blue\_agent.py}) \\[2pt]
+        \textbf{Phase 1 — Disk Agent + Memory Agent} \small(\texttt{blue\_agent.py} + \texttt{memory\_agent.py}) \\[2pt]
         \footnotesize
-        Pass 1: $\sim$25 deterministic SIFT commands · corpus-calibrated log-odds scoring \\[1pt]
-        Pass 2: 75-call Claude agentic loop · extracts IOCs · scores MITRE techniques \\[1pt]
-        Output: \texttt{triage\_report.json} — findings rated \textbf{HIGH} / MED / LOW
+        Disk Agent Pass 1: $\sim$25 deterministic SIFT commands · corpus-calibrated log-odds scoring \\[1pt]
+        Disk Agent Pass 2: 75-call Claude agentic loop · extracts IOCs · scores MITRE techniques \\[1pt]
+        Memory Agent: Volatility 3 parallel path · process injection · VAD anomalies · credential dumps
     };
 
     %% Hallucination risk callout (right of triage)
     \node (risk) [callout, right=2.2cm of triage] {
         \textbf{Hallucination Risk} \\[3pt]
         \scriptsize LLM confidence $\neq$ physical evidence \\[2pt]
-        \textit{controller: Triage raw score 145 (uncapped sum) — Auditor refuted 2 of 3 findings}
+        \textit{nfury: 19 techniques investigated — Auditor confirmed 15, refuted 4}
     };
 
     \draw [<->, dashed, gray, line width=0.9pt]
@@ -57,7 +57,7 @@
 
     %% ── Independence Barrier ──────────────────────────────
     \node (ind) [barrier, below=0.8cm of triage] {
-        \textbf{\small Independence Barrier} \;—\;
+        \textbf{\small Independence Barrier} \ ---\
         \footnotesize Auditor receives only \texttt{\{technique\_id, score, filepath\}}.
         Triage reasoning chain and tool outputs stripped.
         No shared context. No shared model state.
@@ -76,32 +76,31 @@
     \draw[->, thick, draw=orange!70!black]
         (auditor.north east)
         to [out=20, in=340, looseness=4]
-        node[right, font=\tiny\itshape] {3 rounds}
+        node[right, font=\tiny\itshape] {5 rounds}
         (auditor.east);
 
     %% ── Verdict Gate ─────────────────────────────────────
     \node (verdicts) [layer=gray!5, draw=gray!50, below=of auditor] {
         \textbf{Verdict Gate} \\[3pt]
         \footnotesize
-        \textcolor{green!60!black}{\textbf{\textsc{confirmed}}} \;—\;
+        \textcolor{green!60!black}{\textbf{\textsc{confirmed}}} \ ---\
             physical artifact verified on disk
             $\;\rightarrow\;$ enters report \& propagates to subsequent hosts \\[2pt]
-        \textcolor{orange!70!black}{\textbf{\textsc{inconclusive}}} \;—\;
+        \textcolor{orange!70!black}{\textbf{\textsc{inconclusive}}} \ ---\
             insufficient physical evidence
             $\;\rightarrow\;$ logged to audit trail, suppressed from report \\[2pt]
-        \textcolor{red!60!black}{\textbf{\textsc{refuted}}} \;—\;
+        \textcolor{red!60!black}{\textbf{\textsc{refuted}}} \ ---\
             evidence absent or contradicted
             $\;\rightarrow\;$ dropped from all outputs
     };
 
     %% Live result callout (right of verdicts)
     \node (result) [callout, right=2.2cm of verdicts] {
-        \textbf{Live Result} \\[3pt]
-        \scriptsize \texttt{controller} host \\
-        Triage raw score: 145 (3 techniques, uncapped) \\
-        Auditor refuted: 2 \\
-        Final score: \textbf{50 pts} \\
-        Zero false accusations
+        \textbf{Live Result — nfury} \\[3pt]
+        \scriptsize 19 techniques investigated \\
+        15 confirmed · 4 refuted \\
+        Every finding cited to physical artifact \\
+        Runtime: 16 min · Cost: \$14
     };
 
     \draw [->, dashed, gray, line width=0.9pt]

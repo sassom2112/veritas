@@ -6,7 +6,7 @@ structures that should be passed between phases. If a key isn't here,
 it doesn't belong in the handoff.
 """
 from __future__ import annotations
-from typing import TypedDict
+from typing import Dict, TypedDict
 
 
 class TriageHandoff(TypedDict):
@@ -15,7 +15,7 @@ class TriageHandoff(TypedDict):
 
     The Auditor receives technique IDs, their source layer, the raw signals
     that fired, and a log of Pass 2 tool calls it can use to seed verification.
-    It does NOT receive scores, labels, or the triage agent's reasoning.
+    It does NOT receive scores, labels, or the investigating agents' reasoning.
     """
     techniques_detected: list[str]         # MITRE IDs, e.g. ["T1134", "T1055"]
     technique_sources: dict[str, str]      # "disk" | "memory" | "disk+memory"
@@ -37,3 +37,97 @@ class AuditResult(TypedDict):
     refuted: list[str]        # technique IDs where evidence was absent or contradicted
     transcript: list[dict]    # full per-technique challenge log
     adjusted_score: int       # sum of confirmed technique weights, capped at 100
+
+
+# ── Cross-layer verification contracts ────────────────────────────────────────
+# Used by disk_agent.py, memory_agent.investigate_layered(), and cross_verifier.py.
+# The key invariant: reasoning never crosses the layer boundary.
+# Only tool_output and technique_id travel between agents.
+
+class LayerClaim(TypedDict):
+    """
+    A single technique claim produced by disk_agent or memory_agent.
+
+    Crosses the layer boundary stripped of reasoning. The verifying agent
+    receives tool_output (what the filesystem/memory actually said) and
+    artifact_hint (where to look), but never the original agent's analysis.
+
+    A hallucinated claim has no tool_output that corresponds to real evidence —
+    the verifying layer finds nothing and returns NO_VISIBILITY or CONTRADICTED.
+    """
+    technique_id: str         # MITRE ID: "T1134"
+    technique_name: str       # Human-readable: "Access Token Manipulation"
+    source_layer: str         # "disk" | "memory"
+    tool_name: str            # The tool that produced this evidence
+    tool_output: str          # Raw tool output — reasoning quarantined in audit log
+    artifact_hint: str        # Brief pointer: "psexesvc.exe at C:\\Windows\\psexesvc.exe"
+
+
+class CrossVerdict(TypedDict):
+    """
+    Result of a cross-layer verification attempt.
+
+    NO_VISIBILITY is not REFUTED. Fileless malware confirmed in memory
+    has no disk shadow — the disk verifier correctly returns NO_VISIBILITY.
+    Single-sourced findings are reported as SINGLE_SOURCE, not dismissed.
+    """
+    technique_id: str
+    source_layer: str         # where the claim originated: "disk" | "memory"
+    verifying_layer: str      # which layer attempted verification: "memory" | "disk"
+    verdict: str              # "CORROBORATED" | "CONTRADICTED" | "NO_VISIBILITY"
+    citation: str | None      # what the verifying layer found, or None
+
+
+class SameLayerVerdict(TypedDict):
+    """
+    Phase 2 (primary gate) result — same-layer blind replication.
+
+    The verifier receives tool_output + artifact_hint only; investigator
+    reasoning is quarantined. Independence is structural, not prompt-based.
+    See ~/research/epistemic-through-line.md for the formal statement.
+    """
+    technique_id: str
+    source_layer: str         # "disk" | "memory" — matches the original claim's layer
+    verdict: str              # "CONFIRMED" | "REFUTED" | "INCONCLUSIVE"
+    citation: str | None      # what the verifier independently found (or why not)
+
+
+class FinalTechniqueResult(TypedDict):
+    """
+    Adjudicated result after Phase 2 (same-layer) and Phase 3 (cross-layer).
+
+    same_verdict drives final; cross_verdict is annotation only.
+
+    HIGH_CONFIRMED — Phase 2 CONFIRMED + Phase 3 CORROBORATED
+    CONFIRMED      — Phase 2 CONFIRMED + Phase 3 NO_VISIBILITY (single-sourced)
+    DISPUTED       — Phase 2 CONFIRMED + Phase 3 CONTRADICTED (human review needed)
+    REFUTED        — Phase 2 REFUTED
+    INCONCLUSIVE   — Phase 2 INCONCLUSIVE
+    """
+    technique_id: str
+    technique_name: str
+    source_layer: str
+    same_verdict: str         # raw SameLayerVerdict.verdict — drives final
+    cross_verdict: str        # raw CrossVerdict.verdict — annotation only
+    final: str                # "HIGH_CONFIRMED" | "CONFIRMED" | "DISPUTED" | "REFUTED" | "INCONCLUSIVE"
+    citation: str | None
+
+
+class PhaseTelemetry(TypedDict):
+    """Token and cost telemetry for one pipeline phase."""
+    input_tokens:  int
+    output_tokens: int
+    cost_usd:      float
+    duration_ms:   int
+
+
+class HostAuditManifest(TypedDict):
+    """Machine-readable execution manifest written per host investigation."""
+    case_id:               str
+    target_host:           str
+    total_cost_usd:        float
+    total_input_tokens:    int
+    total_output_tokens:   int
+    execution_duration_ms: int
+    phases:                Dict[str, PhaseTelemetry]
+    verdicts_summary:      Dict[str, int]
